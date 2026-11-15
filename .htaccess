@@ -14,12 +14,20 @@ AddType text/javascript .js .mjs
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 </IfModule>
 
-# Service worker selalu diperiksa ulang; file statis boleh di-cache
+# Data bahasa OCR (*.traineddata.gz) dikirim apa adanya, jangan diberi Content-Encoding
+<IfModule mod_mime.c>
+  <FilesMatch "\.traineddata\.gz$">
+    RemoveEncoding .gz
+    ForceType application/octet-stream
+  </FilesMatch>
+</IfModule>
+
+# Service worker & kode aplikasi selalu diperiksa ulang; aset statis boleh di-cache
 <IfModule mod_headers.c>
-  <Files "sw.js">
+  <FilesMatch "\.(js|css|html)$">
     Header set Cache-Control "no-cache"
-  </Files>
-  <FilesMatch "\.(woff2|png|svg|js|css)$">
+  </FilesMatch>
+  <FilesMatch "\.(woff2|png|svg|gz)$">
     Header set Cache-Control "public, max-age=604800"
   </FilesMatch>
   Header set X-Content-Type-Options "nosniff"

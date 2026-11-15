@@ -3,3 +3,5 @@
 *.woff2 binary
 vendor/** linguist-vendored -diff
 assets/fonts/** linguist-vendored
+*.gz binary
+*.wasm binary

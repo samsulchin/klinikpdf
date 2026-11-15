@@ -1,13 +1,17 @@
 /* TTD.in — Service worker: menyimpan semua file aplikasi agar bisa dipakai offline.
    Naikkan VERSION setiap kali ada perubahan file supaya pengguna mendapat versi terbaru. */
-const VERSION = 'ttdin-v2.0.0';
+const VERSION = 'ttdin-v3.1.0';
+// Mesin OCR (vendor/tesseract, ±12 MB) tidak ikut disimpan di awal: disimpan otomatis saat pertama dipakai.
 const ASSETS = [
   './',
   'index.html',
   'manifest.webmanifest',
   'css/style.css',
   'css/editor.css',
+  'css/tools.css',
   'js/app.js',
+  'js/tools.js',
+  'js/pdfcrypt.js',
   'assets/favicon.svg',
   'assets/icon-192.png',
   'assets/icon-512.png',
@@ -30,7 +34,8 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' memastikan yang disimpan adalah versi terbaru dari server, bukan salinan lama di cache browser.
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

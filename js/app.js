@@ -130,16 +130,18 @@
       return Array.from(new Uint8Array(h), (b) => b.toString(16).padStart(2, '0')).join('');
     } catch (_) { return ''; }
   }
-  /** Deteksi PDF yang sudah ditandatangani digital (termasuk e-Meterai). */
-  function hasDigitalSignature(bytes) {
+  /** Cari teks (ASCII) di dalam isi file tanpa memuat semuanya sebagai string sekaligus. */
+  function bytesInclude(bytes, needle) {
     const dec = new TextDecoder('latin1');
     const CH = 4 << 20;
     for (let i = 0; i < bytes.length; i += CH) {
       const s = dec.decode(bytes.subarray(i, Math.min(bytes.length, i + CH + 32)));
-      if (s.includes('/ByteRange')) return true;
+      if (s.includes(needle)) return true;
     }
     return false;
   }
+  /** Deteksi PDF yang sudah ditandatangani digital (termasuk e-Meterai). */
+  function hasDigitalSignature(bytes) { return bytesInclude(bytes, '/ByteRange'); }
 
   // ---------- Memuat library (lazy, dari folder vendor) ----------
   const scriptCache = {};
@@ -218,42 +220,45 @@
 
   // ---------- Pemilihan file ----------
   const fileInput = $('#fileInput');
-  function pickFile() { fileInput.value = ''; fileInput.click(); }
-  $$('[data-open-file]').forEach((b) => b.addEventListener('click', pickFile));
+  let nextMode = null;
+  function pickFile(mode) { nextMode = typeof mode === 'string' ? mode : null; fileInput.value = ''; fileInput.click(); }
+  $$('[data-open-file]').forEach((b) => b.addEventListener('click', () => pickFile()));
   $$('[data-open-sig]').forEach((b) => b.addEventListener('click', () => openSigModal(b.dataset.openSig || undefined)));
   const heroDrop = $('#heroDrop');
-  heroDrop.addEventListener('click', pickFile);
+  heroDrop.addEventListener('click', () => pickFile());
   heroDrop.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickFile(); }
   });
-  fileInput.addEventListener('change', () => { const f = fileInput.files[0]; if (f) openFile(f); });
+  fileInput.addEventListener('change', () => { const f = fileInput.files[0]; if (f) openFile(f, { mode: nextMode }); nextMode = null; });
 
   const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  const inTools = () => document.body.classList.contains('tooling') && !isEditing();
   let dragDepth = 0;
   window.addEventListener('dragenter', (e) => {
     if (!hasFiles(e)) return;
-    e.preventDefault(); dragDepth++; heroDrop.classList.add('drag');
+    e.preventDefault();
+    if (inTools()) return;
+    dragDepth++; heroDrop.classList.add('drag');
   });
   window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
   window.addEventListener('dragleave', (e) => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) || inTools()) return;
     dragDepth = Math.max(0, dragDepth - 1);
     if (!dragDepth) heroDrop.classList.remove('drag');
   });
   window.addEventListener('drop', (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault(); dragDepth = 0; heroDrop.classList.remove('drag');
-    if (sigModal.classList.contains('open')) return;
+    if (inTools() || $('.modal.open')) return;
     const f = e.dataTransfer.files[0];
-    if (f) openFile(f);
+    if (f) openFile(f, { mode: isEditing() ? S.mode : null });
   });
 
   // Contoh QR di landing page
   (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(async () => {
     try {
-      await ensureQr();
-      const q = { name: 'Nama Penandatangan', role: 'Jabatan', org: 'Instansi', caption: false, color: INK[0] };
-      $('#qrDemo').src = renderQrImage(qrPayload(q, { doc: false, code: 'TTD-CONTOH01' }), q);
+      const q = { name: 'Nama Penandatangan', role: 'Jabatan', org: 'Instansi', layout: 'none', color: INK[0] };
+      $('#qrDemo').src = await qrImage(q, { doc: false, code: 'TTD-CONTOH01' });
     } catch (_) { /* abaikan */ }
     ensureLibs().catch(() => {});
   });
@@ -263,8 +268,16 @@
   // ==========================================================
   const S = {
     name: '', kind: 'pdf', bytes: null, pdf: null, hash: '', signed: false,
-    pages: [], els: [], sel: null,
+    pages: [], els: [], sel: null, mode: 'sign', pen: null,
     zoom: 1, fit: 1, dirty: false, hinted: false, placedHint: false,
+  };
+  /** Mode editor (dibuka dari kartu alat): menentukan petunjuk & nama file hasil. */
+  const MODES = {
+    sign: { suffix: 'ditandatangani', tools: [] },
+    edit: { suffix: 'diedit', tools: ['toolText', 'toolImage', 'toolWhiteout'], hint: 'Tambahkan teks atau gambar. Untuk mengganti tulisan lama, tutup dengan "Tutup Putih" lalu ketik teks baru di atasnya.' },
+    annotate: { suffix: 'anotasi', tools: ['toolPen', 'toolHighlight', 'toolRect', 'toolText'], hint: 'Pakai Pena untuk mencoret, Stabilo untuk menandai, Kotak, atau Teks untuk catatan.' },
+    redact: { suffix: 'disensor', tools: ['toolRedact'], hint: 'Klik "Sensor", lalu tutup bagian rahasia dengan kotak hitam. Saat diunduh, isi di bawahnya dihapus permanen.' },
+    form: { suffix: 'formulir', tools: ['toolField', 'toolCheckbox'], hint: 'Klik "Kolom Teks" atau "Kotak Centang", lalu atur posisi & ukurannya. Hasil unduhan menjadi PDF yang bisa diisi.' },
   };
   const stage = $('#stage');
   const pagesWrap = $('#pages');
@@ -302,6 +315,7 @@
   $('#bannerClose').addEventListener('click', () => { $('#signedBanner').hidden = true; });
 
   function resetDoc() {
+    if (S.pen) stopPen(false);
     if (io) io.disconnect();
     S.pages.forEach((p) => p.task && p.task.cancel());
     pagesWrap.innerHTML = '';
@@ -309,9 +323,57 @@
     Object.assign(S, { pdf: null, bytes: null, hash: '', signed: false, pages: [], els: [], sel: null, dirty: false, zoom: 1 });
     $('#signedBanner').hidden = true;
   }
+  function applyMode() {
+    const m = MODES[S.mode] || MODES.sign;
+    $$('.ed-tools .tool').forEach((b) => b.classList.toggle('hl', m.tools.includes(b.id)));
+    const first = m.tools.length && $('#' + m.tools[0]);
+    if (first) first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  // ---------- PDF berkata sandi ----------
+  let pwResolve = null;
+  const pwModal = $('#pwModal');
+  function askPassword(name, wrong) {
+    return new Promise((resolve) => {
+      $('#pwText').textContent = `"${name}" dilindungi kata sandi. Masukkan kata sandi untuk membukanya.`;
+      $('#pwErr').hidden = !wrong;
+      $('#pwInput').value = '';
+      pwResolve = resolve;
+      openModal(pwModal);
+      setTimeout(() => $('#pwInput').focus(), 30);
+    });
+  }
+  function finishPw(v) {
+    const r = pwResolve;
+    pwResolve = null;
+    closeModal(pwModal);
+    if (r) r(v);
+  }
+  $('#pwOk').addEventListener('click', () => finishPw($('#pwInput').value));
+  $('#pwInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); finishPw($('#pwInput').value); } });
+  new MutationObserver(() => {
+    if (!pwModal.classList.contains('open') && pwResolve) { const r = pwResolve; pwResolve = null; r(null); }
+  }).observe(pwModal, { attributes: true, attributeFilter: ['class'] });
+
+  /** Lepas enkripsi PDF (minta kata sandi bila perlu). File tanpa enkripsi dikembalikan apa adanya. */
+  async function unlockPdf(bytes, name) {
+    if (!bytesInclude(bytes, '/Encrypt')) return bytes;
+    await loadScript('js/pdfcrypt.js');
+    let pw = '';
+    let tries = 0;
+    for (;;) {
+      try {
+        return (await window.PDFCrypt.decrypt(bytes, pw)).bytes;
+      } catch (e) {
+        if (e.code !== 'PASSWORD') throw e;
+        pw = await askPassword(name, tries++ > 0);
+        if (pw == null) { const x = new Error('Dibatalkan'); x.code = 'CANCELLED'; throw x; }
+      }
+    }
+  }
 
   // ---------- Membuka file ----------
-  async function openFile(file) {
+  async function openFile(file, opts = {}) {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const isPdf = file.type === 'application/pdf' || ext === 'pdf';
     const isDocx = ext === 'docx' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -327,6 +389,7 @@
     if (S.dirty && S.els.length && !confirm('Buka dokumen baru? Tanda tangan pada dokumen saat ini akan hilang.')) return;
 
     const wasOpen = docOpen();
+    const mode = MODES[opts.mode] ? opts.mode : (wasOpen ? S.mode : 'sign');
     enterEditor();
     showLoading(isDocx ? 'Mengonversi dokumen Word…' : 'Membuka dokumen…');
     try {
@@ -334,12 +397,18 @@
       const original = await file.arrayBuffer();
       const hash = await sha256Hex(original);
       let bytes;
-      if (isPdf) bytes = new Uint8Array(original);
-      else if (isDocx) bytes = await docxToPdf(file);
+      if (isPdf) {
+        bytes = new Uint8Array(original);
+        try { bytes = await unlockPdf(bytes, file.name); }
+        catch (e) {
+          if (e.code === 'CANCELLED') { hideLoading(); if (!wasOpen) leaveEditor(); return; }
+          console.warn('Dekripsi gagal, dibuka apa adanya:', e);
+        }
+      } else if (isDocx) bytes = await docxToPdf(file);
       else bytes = await imageToPdf(file);
       const pdf = await window.pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
       resetDoc();
-      Object.assign(S, { pdf, bytes, hash, name: file.name, kind: isPdf ? 'pdf' : isDocx ? 'docx' : 'image' });
+      Object.assign(S, { pdf, bytes, hash, name: file.name, kind: isPdf ? 'pdf' : isDocx ? 'docx' : 'image', mode });
       S.signed = isPdf && hasDigitalSignature(bytes);
       $('#signedBanner').hidden = !S.signed;
       $('#edFileName').textContent = file.name;
@@ -349,7 +418,10 @@
       stage.scrollTop = 0;
       hideLoading();
       renderLibraries();
-      if (!loadSaved().length) {
+      applyMode();
+      if (mode !== 'sign') {
+        toast(MODES[mode].hint);
+      } else if (!loadSaved().length) {
         openSigModal('upload');
       } else if (!S.hinted) {
         S.hinted = true;
@@ -390,7 +462,7 @@
   }
 
   /** Ubah dokumen Word (DOCX) menjadi PDF: render ke HTML, lalu ke gambar per halaman. */
-  async function docxToPdf(file) {
+  async function docxToPdf(file, onProgress = (i, n) => showLoading(`Mengonversi dokumen Word… (${i}/${n})`)) {
     await ensureDocx();
     const host = document.createElement('div');
     host.className = 'docx-host';
@@ -408,7 +480,7 @@
       const doc = await window.PDFLib.PDFDocument.create();
       const scale = 2;
       for (let i = 0; i < secs.length; i++) {
-        showLoading(`Mengonversi dokumen Word… (${i + 1}/${secs.length})`);
+        onProgress(i + 1, secs.length);
         const sec = secs[i];
         const wpx = sec.offsetWidth;
         let hpx = parseFloat(getComputedStyle(sec).minHeight);
@@ -495,6 +567,7 @@
     }
     $('#zoomVal').textContent = Math.round(S.zoom * 100) + '%';
     S.els.forEach((el) => { applyStyle(el); if (el.type === 'text') measureText(el); });
+    if (S.pen) S.pages.forEach((p) => penRedraw(p));
   }
 
   async function renderPage(p) {
@@ -620,7 +693,8 @@
     const aspect = img.naturalWidth / img.naturalHeight;
     const p = S.pages[t.page];
     const kind = extra.kind || 'sig';
-    const size = { mark: [16, 16], qr: [85, 130], sig: [Math.min(170, p.w * 0.32), 75] }[kind] || [150, 75];
+    const qrSize = aspect > 1.4 ? [Math.min(320, p.w * 0.55), 125] : [105, 145]; // QR + keterangan di samping lebih lebar
+    const size = { mark: [16, 16], qr: qrSize, sig: [Math.min(170, p.w * 0.32), 75], photo: [Math.min(220, p.w * 0.45), Math.min(220, p.h * 0.4)] }[kind] || [150, 75];
     let wPt = size[0];
     let hPt = wPt / aspect;
     if (hPt > size[1]) { hPt = size[1]; wPt = hPt * aspect; }
@@ -659,6 +733,173 @@
     addImageEl(makeMark(mark, INK[0]), { kind: 'mark', mark, color: INK[0] });
   }
 
+  // ---------- Bentuk (stabilo, kotak, tutup putih, sensor) & kolom formulir ----------
+  const SHAPES = {
+    highlight: { colors: ['#fde047', '#86efac', '#f9a8d4', '#93c5fd'], size: [150, 16], hint: 'Tarik titik di pojok untuk menyesuaikan panjang & tinggi stabilo.' },
+    rect: { colors: INK, size: [150, 70] },
+    whiteout: { size: [130, 20], hint: 'Kotak putih menutup tulisan di bawahnya. Tambahkan Teks di atasnya untuk menggantinya.' },
+    redact: { size: [130, 18], hint: 'Bagian di bawah kotak hitam akan dihapus permanen saat diunduh sebagai PDF.' },
+  };
+  const hinted = new Set();
+  function addShape(shape) {
+    const t = visibleTarget();
+    if (!t) return;
+    const p = S.pages[t.page];
+    const def = SHAPES[shape];
+    const el = { type: 'shape', shape, free: true, page: t.page, w: def.size[0] / p.w, h: def.size[1] / p.h, color: def.colors ? def.colors[0] : '#000000' };
+    placeAt(el, t);
+    addElement(el);
+    if (def.hint && !hinted.has(shape)) { hinted.add(shape); toast(def.hint); }
+  }
+  function uniqueFieldName(base) {
+    const used = new Set(S.els.filter((e) => e.type === 'field').map((e) => e.name));
+    if (!used.has(base)) return base;
+    let n = 2;
+    while (used.has(`${base} ${n}`)) n++;
+    return `${base} ${n}`;
+  }
+  function addField(kind) {
+    const t = visibleTarget();
+    if (!t) return;
+    const p = S.pages[t.page];
+    const n = S.els.filter((e) => e.type === 'field' && e.field === kind).length + 1;
+    const el = kind === 'check'
+      ? { type: 'field', field: 'check', aspect: 1, page: t.page, w: 14 / p.w, h: 14 / p.h, name: uniqueFieldName(`Centang ${n}`) }
+      : { type: 'field', field: 'text', free: true, page: t.page, w: 180 / p.w, h: 20 / p.h, name: uniqueFieldName(`Kolom ${n}`) };
+    placeAt(el, t);
+    addElement(el);
+    if (!hinted.has('field')) { hinted.add('field'); toast('Klik ikon pensil untuk mengganti nama kolom. Ubah ukuran lewat titik di pojok.'); }
+  }
+  async function addPhoto(file) {
+    if (!file || !/^image\//.test(file.type)) { toast('Pilih file gambar (JPG, PNG, atau WEBP).', 'error'); return; }
+    const url = URL.createObjectURL(file);
+    let img;
+    try { img = await loadImage(url); } catch (_) { toast('Gambar tidak dapat dibuka.', 'error'); return; } finally { URL.revokeObjectURL(url); }
+    const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0, c.width, c.height);
+    const png = /png|webp|gif/.test(file.type);
+    if (!png) { x.globalCompositeOperation = 'destination-over'; x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); }
+    await addImageEl(c.toDataURL(png ? 'image/png' : 'image/jpeg', 0.9), { kind: 'photo' });
+  }
+
+  // ---------- Pena (coretan bebas) ----------
+  const penBar = $('#penBar');
+  function startPen() {
+    if (!S.pages.length) return;
+    select(null);
+    S.pen = { color: INK[0], width: 2, strokes: new Map(), order: [] };
+    document.body.classList.add('pen-on');
+    $('#toolPen').classList.add('active');
+    penBar.hidden = false;
+    $$('[data-pen-color]', penBar).forEach((b, i) => b.classList.toggle('active', i === 0));
+    $$('[data-pen-width]', penBar).forEach((b) => b.classList.toggle('active', +b.dataset.penWidth === 2));
+    if (!hinted.has('pen')) { hinted.add('pen'); toast('Coret langsung di halaman. Klik "Selesai" jika sudah.'); }
+  }
+  function penLayer(p) {
+    let c = p.el.querySelector('.pen-layer');
+    if (!c) { c = document.createElement('canvas'); c.className = 'pen-layer'; p.el.appendChild(c); }
+    return c;
+  }
+  function penDrawStroke(ctx, s, sx, sy, k) {
+    const pts = s.pts.map((q) => ({ x: q.x * sx, y: q.y * sy, w: s.w * k }));
+    prepCtx(ctx, s.color);
+    if (pts.length === 1) { drawDot(ctx, pts[0]); return; }
+    drawStroke(ctx, pts);
+  }
+  function penRedraw(p) {
+    const list = S.pen && S.pen.strokes.get(p.i);
+    const c = p.el.querySelector('.pen-layer');
+    if (!list || !c) return;
+    const d = dpr();
+    c.width = Math.round(p.cssW * d);
+    c.height = Math.round(p.cssH * d);
+    const x = c.getContext('2d');
+    const k = (p.cssW / p.w) * d;
+    list.forEach((s) => penDrawStroke(x, s, c.width, c.height, k));
+  }
+  pagesWrap.addEventListener('pointerdown', (e) => {
+    if (!S.pen) return;
+    const pageEl = e.target.closest('.page');
+    if (!pageEl) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const p = S.pages[+pageEl.dataset.index];
+    if (!S.pen.strokes.has(p.i)) S.pen.strokes.set(p.i, []);
+    penLayer(p);
+    const stroke = { color: S.pen.color, w: S.pen.width, pts: [] };
+    S.pen.strokes.get(p.i).push(stroke);
+    S.pen.order.push(p.i);
+    const r = pageEl.getBoundingClientRect();
+    const add = (ev) => stroke.pts.push({ x: clamp((ev.clientX - r.left) / r.width, 0, 1), y: clamp((ev.clientY - r.top) / r.height, 0, 1) });
+    add(e);
+    penRedraw(p);
+    try { pageEl.setPointerCapture(e.pointerId); } catch (_) { /* abaikan */ }
+    const move = (ev) => {
+      const evs = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [ev];
+      (evs.length ? evs : [ev]).forEach(add);
+      penRedraw(p);
+    };
+    const up = () => {
+      pageEl.removeEventListener('pointermove', move);
+      pageEl.removeEventListener('pointerup', up);
+      pageEl.removeEventListener('pointercancel', up);
+    };
+    pageEl.addEventListener('pointermove', move);
+    pageEl.addEventListener('pointerup', up);
+    pageEl.addEventListener('pointercancel', up);
+  });
+  /** Selesai menggambar: coretan tiap halaman menjadi satu elemen gambar yang bisa digeser. */
+  function stopPen(commit = true) {
+    const pen = S.pen;
+    if (!pen) return;
+    S.pen = null;
+    document.body.classList.remove('pen-on');
+    $('#toolPen').classList.remove('active');
+    penBar.hidden = true;
+    $$('.pen-layer', pagesWrap).forEach((c) => c.remove());
+    if (!commit) return;
+    for (const [pi, list] of pen.strokes) {
+      const strokes = list.filter((s) => s.pts.length);
+      if (!strokes.length) continue;
+      const p = S.pages[pi];
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const s of strokes) for (const q of s.pts) {
+        const ux = q.x * p.w, uy = q.y * p.h, pad = s.w;
+        x0 = Math.min(x0, ux - pad); y0 = Math.min(y0, uy - pad);
+        x1 = Math.max(x1, ux + pad); y1 = Math.max(y1, uy + pad);
+      }
+      x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(p.w, x1); y1 = Math.min(p.h, y1);
+      const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
+      const k = Math.min(4, 3000 / Math.max(bw, bh));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bw * k));
+      c.height = Math.max(1, Math.round(bh * k));
+      const ctx = c.getContext('2d');
+      ctx.translate(-x0 * k, -y0 * k);
+      strokes.forEach((s) => penDrawStroke(ctx, s, p.w * k, p.h * k, k));
+      addElement({ type: 'image', kind: 'ink', src: c.toDataURL('image/png'), aspect: c.width / c.height, page: pi, x: x0 / p.w, y: y0 / p.h, w: bw / p.w, h: bh / p.h }, { select: false });
+    }
+  }
+  penBar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || !S.pen) return;
+    if (b.dataset.penColor) {
+      S.pen.color = b.dataset.penColor;
+      $$('[data-pen-color]', penBar).forEach((x) => x.classList.toggle('active', x === b));
+    } else if (b.dataset.penWidth) {
+      S.pen.width = +b.dataset.penWidth;
+      $$('[data-pen-width]', penBar).forEach((x) => x.classList.toggle('active', x === b));
+    } else if (b.dataset.penAct === 'undo') {
+      const pi = S.pen.order.pop();
+      if (pi != null) { S.pen.strokes.get(pi).pop(); penRedraw(S.pages[pi]); }
+    } else if (b.dataset.penAct === 'done') stopPen(true);
+  });
+
   function renderEl(el) {
     const p = S.pages[el.page];
     const node = document.createElement('div');
@@ -668,6 +909,18 @@
       const img = new Image();
       img.src = el.src; img.alt = ''; img.draggable = false;
       node.appendChild(img);
+    } else if (el.type === 'shape') {
+      const b = document.createElement('div');
+      b.className = 'shape shape-' + el.shape;
+      node.appendChild(b);
+      node.classList.add('el-shape');
+    } else if (el.type === 'field') {
+      const b = document.createElement('div');
+      b.className = 'fieldbox fieldbox-' + el.field;
+      if (el.field === 'check') b.innerHTML = svg('<path d="M20 6 9 17l-5-5"/>', 3);
+      else { const s = document.createElement('span'); s.textContent = el.name; b.appendChild(s); }
+      b.title = el.name;
+      node.appendChild(b);
     } else {
       const t = document.createElement('div');
       t.className = 'txt';
@@ -699,16 +952,23 @@
     if (!n) return;
     n.style.left = el.x * 100 + '%';
     n.style.top = el.y * 100 + '%';
-    if (el.type === 'image') {
-      n.style.width = el.w * 100 + '%';
-      n.style.height = el.h * 100 + '%';
-    } else {
+    const p = S.pages[el.page];
+    if (el.type === 'text') {
       const t = n.firstChild;
       t.style.fontSize = `calc(var(--pw) * ${el.fs})`;
       t.style.color = el.color;
       t.style.fontFamily = TEXT_FONT;
+    } else {
+      n.style.width = el.w * 100 + '%';
+      n.style.height = el.h * 100 + '%';
+      if (el.type === 'shape') {
+        const b = n.firstChild;
+        if (el.shape === 'highlight') b.style.background = el.color;
+        if (el.shape === 'rect') { b.style.borderColor = el.color; b.style.borderWidth = Math.max(1, (1.5 * p.cssW) / p.w) + 'px'; }
+      } else if (el.type === 'field' && el.field === 'text') {
+        n.firstChild.style.fontSize = Math.max(8, Math.min(13, el.h * p.cssH * 0.55)) + 'px';
+      }
     }
-    const p = S.pages[el.page];
     n.classList.toggle('near-top', el.y * p.cssH < 56);
   }
   function measureText(el) {
@@ -721,10 +981,11 @@
   function buildBar(el) {
     const bar = document.createElement('div');
     bar.className = 'el-bar';
-    const colorable = el.type === 'text' || el.kind === 'mark';
+    const colors = el.type === 'text' || el.kind === 'mark' ? INK : el.type === 'shape' ? (SHAPES[el.shape].colors || null) : null;
     let html = '';
-    if (colorable) html += INK.map((c) => `<button class="sw" data-act="color" data-color="${c}" style="background:${c}" title="Ganti warna" aria-label="Ganti warna"></button>`).join('');
+    if (colors) html += colors.map((c) => `<button class="sw" data-act="color" data-color="${c}" style="background:${c}" title="Ganti warna" aria-label="Ganti warna"></button>`).join('');
     if (el.type === 'text') html += `<button data-act="edit" title="Edit teks" aria-label="Edit teks">${ICON.edit}</button>`;
+    if (el.type === 'field') html += `<button data-act="rename" title="Ganti nama kolom" aria-label="Ganti nama kolom">${ICON.edit}</button>`;
     if (S.pages.length > 1) html += `<button data-act="all" title="Salin ke semua halaman (paraf)">${ICON.layers}<span>Semua hal.</span></button>`;
     html += `<button data-act="dup" title="Duplikat" aria-label="Duplikat">${ICON.copy}</button>`;
     html += `<button data-act="del" class="danger" title="Hapus" aria-label="Hapus">${ICON.trash}</button>`;
@@ -752,11 +1013,21 @@
       S.dirty = true;
     } else if (act === 'edit') {
       startEdit(el);
+    } else if (act === 'rename') {
+      const v = prompt('Nama kolom (dipakai sebagai nama field di PDF):', el.name);
+      if (v && v.trim() && v.trim() !== el.name) {
+        el.name = uniqueFieldName(v.trim().slice(0, 60));
+        const b = el.node.firstChild;
+        b.title = el.name;
+        if (el.field === 'text') b.firstChild.textContent = el.name;
+        S.dirty = true;
+      }
     } else if (act === 'del') {
       removeEl(el);
     } else if (act === 'dup') {
       stopEdit(el);
-      const c = addElement({ ...cloneData(el), x: el.x + 0.02, y: el.y + 0.02 });
+      const extra = el.type === 'field' ? { name: uniqueFieldName(el.name) } : {};
+      const c = addElement({ ...cloneData(el), x: el.x + 0.02, y: el.y + 0.02, ...extra });
       clampEl(c); applyStyle(c);
     } else if (act === 'all') {
       stopEdit(el);
@@ -766,8 +1037,10 @@
       for (const p of S.pages) {
         if (p.i === el.page) continue;
         const data = { ...cloneData(el), page: p.i };
-        if (el.type === 'image') data.h = (el.w * p.w) / el.aspect / p.h;
-        else data.fs = (el.fs * src.w) / p.w;
+        if (el.type === 'text') data.fs = (el.fs * src.w) / p.w;
+        else if (el.aspect) data.h = (el.w * p.w) / el.aspect / p.h;
+        else { data.w = (el.w * src.w) / p.w; data.h = (el.h * src.h) / p.h; }
+        if (el.type === 'field') data.name = uniqueFieldName(`${el.name} hal${p.i + 1}`);
         const c = addElement(data, { select: false });
         if (c.type === 'text') measureText(c);
         clampEl(c); applyStyle(c);
@@ -832,7 +1105,7 @@
       select(el);
       const resize = e.target.classList.contains('handle');
       const p = S.pages[el.page];
-      const st = { x: e.clientX, y: e.clientY, ex: el.x, ey: el.y, ew: el.w, fs: el.fs, pw: p.cssW, ph: p.cssH, moved: false };
+      const st = { x: e.clientX, y: e.clientY, ex: el.x, ey: el.y, ew: el.w, eh: el.h, fs: el.fs, pw: p.cssW, ph: p.cssH, moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) { /* abaikan */ }
 
       const move = (ev) => {
@@ -840,7 +1113,10 @@
         if (!st.moved && Math.hypot(dx, dy) < 3) return;
         st.moved = true;
         if (resize) {
-          if (el.type === 'image') {
+          if (el.free) {
+            el.w = clamp((st.ew * st.pw + dx) / st.pw, 6 / st.pw, 1 - el.x);
+            el.h = clamp((st.eh * st.ph + dy) / st.ph, 4 / st.ph, 1 - el.y);
+          } else if (el.type !== 'text') {
             const d = Math.abs(dx) > Math.abs(dy * el.aspect) ? dx : dy * el.aspect;
             const wpx = clamp(st.ew * st.pw + d, 14, st.pw);
             el.w = wpx / st.pw;
@@ -885,7 +1161,7 @@
       el.page = p.i;
       el.x = (r.left - pr.left) / pr.width;
       el.y = (r.top - pr.top) / pr.height;
-      if (el.type === 'image') { el.w = r.width / pr.width; el.h = r.height / pr.height; }
+      if (el.type !== 'text') { el.w = r.width / pr.width; el.h = r.height / pr.height; }
       else el.fs = (el.fs * cur.w) / p.w;
       p.el.appendChild(el.node);
       applyStyle(el);
@@ -898,6 +1174,7 @@
 
   document.addEventListener('keydown', (e) => {
     if (!isEditing() || $('.modal.open')) return;
+    if (S.pen && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); stopPen(true); return; }
     const el = S.sel;
     if (!el || el.node.classList.contains('editing')) return;
     if (e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
@@ -915,12 +1192,22 @@
   });
 
   // ---------- Toolbar ----------
+  const tool = (id, fn) => $(id).addEventListener('click', () => { if (S.pen && id !== '#toolPen') stopPen(true); fn(); });
   $('#libAdd').addEventListener('click', () => openSigModal());
-  $('#toolText').addEventListener('click', () => addText('', true));
-  $('#toolDate').addEventListener('click', () => addText(formatDate(), false));
-  $('#toolCheck').addEventListener('click', () => addMark('check'));
-  $('#toolCross').addEventListener('click', () => addMark('cross'));
-  $('#toolMeterai').addEventListener('click', () => openModal($('#meteraiModal')));
+  tool('#toolText', () => addText('', true));
+  tool('#toolDate', () => addText(formatDate(), false));
+  tool('#toolCheck', () => addMark('check'));
+  tool('#toolCross', () => addMark('cross'));
+  tool('#toolImage', () => { const i = $('#imgInput'); i.value = ''; i.click(); });
+  $('#imgInput').addEventListener('change', (e) => { if (e.target.files[0]) addPhoto(e.target.files[0]); });
+  tool('#toolPen', () => (S.pen ? stopPen(true) : startPen()));
+  tool('#toolHighlight', () => addShape('highlight'));
+  tool('#toolRect', () => addShape('rect'));
+  tool('#toolWhiteout', () => addShape('whiteout'));
+  tool('#toolRedact', () => addShape('redact'));
+  tool('#toolField', () => addField('text'));
+  tool('#toolCheckbox', () => addField('check'));
+  tool('#toolMeterai', () => openModal($('#meteraiModal')));
 
   // ==========================================================
   // TANDA TANGAN SAYA (pustaka tersimpan di perangkat)
@@ -954,11 +1241,7 @@
   async function placeSignature(entry, target) {
     if (!S.pages.length) return;
     let src = entry.src;
-    if (entry.kind === 'qr') {
-      await ensureQr();
-      try { await document.fonts.load(`700 24px ${UI_FONT}`); } catch (_) { /* abaikan */ }
-      src = renderQrImage(qrPayload(entry.qr, { doc: true, code: randomCode() }), entry.qr);
-    }
+    if (entry.kind === 'qr') src = await qrImage(entry.qr, { doc: true, code: randomCode() });
     await addImageEl(src, { kind: entry.kind === 'qr' ? 'qr' : 'sig' }, target);
   }
 
@@ -1385,85 +1668,319 @@
   }
 
   // ---------- Tab: QR Code ----------
-  const QR_FIELDS = { name: '#qrName', role: '#qrRole', org: '#qrOrg', contact: '#qrContact' };
+  const QR_FIELDS = { name: '#qrName', role: '#qrRole', org: '#qrOrg', nip: '#qrNip', contact: '#qrContact' };
+  const QR_FORM_KEY = 'ttdin.qrform.v1';
+  let qrLogo = '';
   function readQrForm() {
     const q = {};
     for (const [k, sel] of Object.entries(QR_FIELDS)) q[k] = $(sel).value.trim();
     q.doc = $('#qrDoc').checked;
-    q.caption = $('#qrCaption').checked;
+    q.layout = $('#qrLayout').value;
+    q.wm = $('#qrWm').checked;
+    q.logo = qrLogo;
     q.color = sigColor;
     return q;
   }
-  /** Isi teks QR: bisa dibaca kamera HP mana pun tanpa aplikasi khusus. */
-  function qrPayload(q, opts = {}) {
+  /** TTD QR lama (sebelum ada pilihan tampilan) memakai q.caption. */
+  const qrLayoutOf = (q) => q.layout || (q.caption === false ? 'none' : 'below');
+
+  const b64url = (bytes) => { let s = ''; bytes.forEach((b) => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const fromB64url = (s) => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); };
+  const hexBytes = (h) => Uint8Array.from(h.match(/../g) || [], (x) => parseInt(x, 16));
+  const bytesHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  /** Alamat halaman verifikasi = alamat situs ini (hanya jika dibuka lewat http/https). */
+  function verifyBase() {
+    if (!/^https?:$/.test(location.protocol)) return '';
+    return location.origin + location.pathname.replace(/index\.html$/, '');
+  }
+  /** Versi lama: teks biasa. Dipakai hanya jika TTD.in dibuka langsung dari file di komputer. */
+  function qrTextPayload(q, opts = {}) {
     const L = ['DITANDATANGANI SECARA ELEKTRONIK', 'Nama: ' + (q.name || '-')];
     if (q.role) L.push('Jabatan: ' + q.role);
     if (q.org) L.push('Instansi: ' + q.org);
+    if (q.nip) L.push(q.nip);
     if (q.contact) L.push('Kontak: ' + q.contact);
     if (opts.doc && q.doc) {
       L.push('Dokumen: ' + (S.name || 'dokumen.pdf'));
       L.push('Waktu: ' + formatDateTime());
-      if (S.hash) L.push('SHA-256 dokumen asli: ' + S.hash);
+      if (S.hash) L.push('SHA-256: ' + S.hash.slice(0, 32));
     }
     if (opts.code) L.push('Kode: ' + opts.code);
-    L.push('Dibuat dengan TTD.in');
     return L.join('\n');
   }
-  function renderQrImage(text, q) {
-    const qr = window.qrcode(0, 'L');
+  /**
+   * Isi QR: tautan ke halaman verifikasi di situs ini. Datanya ikut di dalam tautan (setelah tanda #),
+   * jadi tidak perlu server/database dan tidak pernah dikirim ke server saat dibuka.
+   * Kamera HP mana pun langsung menawarkan untuk membuka tautannya.
+   */
+  // Teks ditulis hampir apa adanya (spasi → "+") agar tautan sependek mungkin: QR makin renggang & mudah dipindai.
+  const urlPart = (s) => Array.from(new TextEncoder().encode(s), (b) => {
+    if (b === 32) return '+';
+    const ch = String.fromCharCode(b);
+    return b < 128 && /[A-Za-z0-9.,\-_:/@;]/.test(ch) ? ch : '%' + b.toString(16).toUpperCase().padStart(2, '0');
+  }).join('');
+  function qrPayload(q, opts = {}) {
+    const base = verifyBase();
+    if (!base) return qrTextPayload(q, opts);
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const withDoc = opts.doc && q.doc;
+    const f = ['2', q.name, q.role, q.org, q.nip, q.contact,
+      withDoc ? clean(S.name || 'dokumen.pdf').slice(0, 50) : '',
+      withDoc ? Math.floor(Date.now() / 1000).toString(36) : '',
+      withDoc && S.hash ? b64url(hexBytes(S.hash.slice(0, 16))) : '',
+      String(opts.code || '').replace(/^TTD-/, '')].map(clean);
+    while (f.length > 2 && !f[f.length - 1]) f.pop();
+    return `${base}#v=${f.map(urlPart).join('~')}`;
+  }
+  function parseQrPayload(s) {
+    let f;
+    if (s.startsWith('2~')) f = s.split('~').map((x) => decodeURIComponent(x.replace(/\+/g, ' ')));
+    else f = new TextDecoder().decode(fromB64url(s)).split('\n'); // format versi 1
+    if ((f[0] !== '1' && f[0] !== '2') || !f[1]) return null;
+    const [, name, role, org, nip, contact, doc, t, hash, code] = f;
+    const time = t ? new Date(parseInt(t, 36) * 1000) : null;
+    return { name, role, org, nip, contact, doc, time: time && !Number.isNaN(time.getTime()) ? time : null, hash: hash ? bytesHex(fromB64url(hash)) : '', code: code ? 'TTD-' + code : '' };
+  }
+
+  const logoCache = new Map();
+  function logoImage(src) {
+    if (!src) return Promise.resolve(null);
+    if (!logoCache.has(src)) logoCache.set(src, loadImage(src).catch(() => null));
+    return logoCache.get(src);
+  }
+  /** Buat gambar TTD QR (memuat library, huruf, dan logo terlebih dahulu). */
+  async function qrImage(q, opts) {
+    await ensureQr();
+    try { await document.fonts.load(`700 24px ${UI_FONT}`); } catch (_) { /* abaikan */ }
+    return renderQrImage(qrPayload(q, opts), q, await logoImage(q.logo));
+  }
+  function renderQrImage(text, q, logo) {
+    // Logo menutup sebagian modul, jadi koreksi galat dinaikkan (Q = 25%) agar QR tetap terbaca.
+    const qr = window.qrcode(0, logo ? 'Q' : 'M');
     qr.addData(text, 'Byte');
     qr.make();
     const n = qr.getModuleCount();
-    const cell = 10, quiet = 2;
+    const cell = 8, quiet = 4;
     const qs = (n + quiet * 2) * cell;
-    const cap = q.caption && q.name;
-    const capH = cap ? Math.round(qs * 0.2) : 0;
+    const ink = q.color || INK[0];
+    const qc = document.createElement('canvas');
+    qc.width = qc.height = qs;
+    const x = qc.getContext('2d');
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, qs, qs);
+    x.fillStyle = ink;
+    for (let r = 0; r < n; r++) {
+      for (let k = 0; k < n; k++) if (qr.isDark(r, k)) x.fillRect((k + quiet) * cell, (r + quiet) * cell, cell, cell);
+    }
+    if (logo) {
+      let m = Math.round(n * 0.22);
+      if ((n - m) % 2) m++;
+      const s = ((n - m) / 2 + quiet) * cell, size = m * cell;
+      x.fillStyle = '#fff';
+      x.beginPath();
+      if (x.roundRect) x.roundRect(s, s, size, size, cell * 1.2); else x.rect(s, s, size, size);
+      x.fill();
+      const pad = cell * 0.9;
+      const k = Math.min((size - 2 * pad) / logo.naturalWidth, (size - 2 * pad) / logo.naturalHeight);
+      const w = logo.naturalWidth * k, h = logo.naturalHeight * k;
+      x.drawImage(logo, s + (size - w) / 2, s + (size - h) / 2, w, h);
+    }
+    const layout = qrLayoutOf(q);
+    if (layout === 'side') return qrSideLayout(qc, q, logo);
+    if (layout === 'below' && q.name) return qrBelowLayout(qc, q);
+    return qc.toDataURL('image/png');
+  }
+  function qrBelowLayout(qc, q) {
+    const qs = qc.width;
+    const capH = Math.round(qs * 0.2);
     const c = document.createElement('canvas');
     c.width = qs;
     c.height = qs + capH;
     const x = c.getContext('2d');
     x.fillStyle = '#fff';
     x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(qc, 0, 0);
+    let fs = Math.round(qs * 0.085);
+    x.font = `700 ${fs}px ${UI_FONT}`;
+    while (x.measureText(q.name).width > qs * 0.94 && fs > 8) { fs--; x.font = `700 ${fs}px ${UI_FONT}`; }
+    x.textAlign = 'center';
+    x.textBaseline = 'alphabetic';
     x.fillStyle = q.color || INK[0];
-    for (let r = 0; r < n; r++) {
-      for (let k = 0; k < n; k++) {
-        if (qr.isDark(r, k)) x.fillRect((k + quiet) * cell, (r + quiet) * cell, cell, cell);
+    x.fillText(q.name, qs / 2, qs + fs * 0.35);
+    let fs2 = Math.round(qs * 0.048);
+    x.font = `500 ${fs2}px ${UI_FONT}`;
+    const sub = 'Ditandatangani secara elektronik';
+    while (x.measureText(sub).width > qs * 0.94 && fs2 > 6) { fs2--; x.font = `500 ${fs2}px ${UI_FONT}`; }
+    x.fillStyle = '#475569';
+    x.fillText(sub, qs / 2, qs + fs * 0.35 + fs2 * 1.6);
+    return c.toDataURL('image/png');
+  }
+  /** QR di kiri, keterangan penanda tangan di kanan (gaya surat dinas). */
+  function qrSideLayout(qc, q, logo) {
+    const qs = qc.width;
+    const SERIF = '"Times New Roman", Times, "Liberation Serif", serif';
+    const meas = document.createElement('canvas').getContext('2d');
+    const maxW = qs * 1.75;
+    const wrap = (text, font) => {
+      meas.font = font;
+      const out = [];
+      let line = '';
+      for (const w of String(text).split(/\s+/).filter(Boolean)) {
+        const t = line ? line + ' ' + w : w;
+        if (line && meas.measureText(t).width > maxW) { out.push(line); line = w; } else line = t;
       }
+      if (line) out.push(line);
+      return out;
+    };
+    const build = (k) => {
+      const s1 = qs * 0.07 * k, s2 = qs * 0.09 * k, s3 = qs * 0.08 * k;
+      const f1 = `italic ${s1}px ${SERIF}`, f2 = `700 ${s2}px ${SERIF}`, f3 = `${s3}px ${SERIF}`;
+      const L = [{ t: 'Ditandatangani secara elektronik oleh:', f: f1, s: s1 }];
+      for (const part of [q.role, q.org].filter(Boolean)) wrap(part, f2).forEach((t) => L.push({ t, f: f2, s: s2 }));
+      if (q.role || q.org) L.push({ gap: s2 * 0.9 });
+      wrap(q.name || 'Nama Penanda Tangan', f2).forEach((t) => L.push({ t, f: f2, s: s2 }));
+      if (q.nip) L.push({ t: q.nip, f: f3, s: s3 });
+      const h = L.reduce((a, l) => a + (l.gap || l.s * 1.22), 0);
+      return { L, h };
+    };
+    let k = 1, B = build(k);
+    while (B.h > qs * 0.9 && k > 0.4) { k *= 0.93; B = build(k); }
+    let tw = 0;
+    for (const l of B.L) if (l.t) { meas.font = l.f; tw = Math.max(tw, meas.measureText(l.t).width); }
+    const gap = qs * 0.06;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(qs + gap + tw + qs * 0.04);
+    c.height = qs;
+    const x = c.getContext('2d');
+    x.drawImage(qc, 0, 0);
+    if (logo && q.wm) {
+      const h = qs * 0.92, w = (logo.naturalWidth / logo.naturalHeight) * h;
+      x.save();
+      x.globalAlpha = 0.1;
+      x.drawImage(logo, c.width - w - qs * 0.02, (qs - h) / 2, w, h);
+      x.restore();
     }
-    if (cap) {
-      let fs = Math.round(qs * 0.085);
-      x.font = `700 ${fs}px ${UI_FONT}`;
-      while (x.measureText(q.name).width > qs * 0.94 && fs > 8) { fs--; x.font = `700 ${fs}px ${UI_FONT}`; }
-      x.textAlign = 'center';
-      x.textBaseline = 'alphabetic';
-      x.fillStyle = q.color || INK[0];
-      x.fillText(q.name, qs / 2, qs + fs * 0.6);
-      let fs2 = Math.round(qs * 0.048);
-      x.font = `500 ${fs2}px ${UI_FONT}`;
-      const sub = 'Ditandatangani secara elektronik';
-      while (x.measureText(sub).width > qs * 0.94 && fs2 > 6) { fs2--; x.font = `500 ${fs2}px ${UI_FONT}`; }
-      x.fillStyle = '#475569';
-      x.fillText(sub, qs / 2, qs + fs * 0.6 + fs2 * 1.6);
+    x.fillStyle = q.color || INK[0];
+    x.textBaseline = 'alphabetic';
+    let y = (qs - B.h) / 2;
+    for (const l of B.L) {
+      if (l.gap) { y += l.gap; continue; }
+      y += l.s * 1.22;
+      x.font = l.f;
+      x.fillText(l.t, qs + gap, y - l.s * 0.28);
     }
     return c.toDataURL('image/png');
   }
+
   let qrTimer;
   function updateQrPreview() {
     clearTimeout(qrTimer);
     qrTimer = setTimeout(async () => {
       try {
-        await ensureQr();
-        try { await document.fonts.load(`700 24px ${UI_FONT}`); } catch (_) { /* abaikan */ }
         const q = readQrForm();
         if (!q.name) q.name = 'Nama Anda';
-        $('#qrPreview').src = renderQrImage(qrPayload(q, { doc: true, code: 'TTD-XXXXXXXX' }), q);
+        $('#qrPreview').src = await qrImage(q, { doc: true, code: 'TTD-XXXXXXXX' });
       } catch (e) { console.error(e); }
     }, 120);
   }
-  [...Object.values(QR_FIELDS), '#qrDoc', '#qrCaption'].forEach((sel) => {
+  function renderLogoUi() {
+    $('#qrLogoPrev').hidden = !qrLogo;
+    if (qrLogo) $('#qrLogoPrev').src = qrLogo;
+    $('#qrLogoDel').hidden = !qrLogo;
+    $('#qrLogoBtn').textContent = qrLogo ? 'Ganti logo' : 'Pilih logo';
+    $('#qrWmWrap').hidden = !(qrLogo && $('#qrLayout').value === 'side');
+  }
+  [...Object.values(QR_FIELDS), '#qrDoc', '#qrLayout', '#qrWm'].forEach((sel) => {
     $(sel).addEventListener('input', updateQrPreview);
-    $(sel).addEventListener('change', updateQrPreview);
+    $(sel).addEventListener('change', () => { renderLogoUi(); updateQrPreview(); });
   });
+  $('#qrLogoBtn').addEventListener('click', () => { const i = $('#qrLogoFile'); i.value = ''; i.click(); });
+  $('#qrLogoDel').addEventListener('click', () => { qrLogo = ''; renderLogoUi(); updateQrPreview(); });
+  $('#qrLogoFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { toast('Pilih file gambar logo (PNG atau JPG).', 'error'); return; }
+    const url = URL.createObjectURL(f);
+    try {
+      const img = await loadImage(url);
+      const k = Math.min(1, 320 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k));
+      c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      qrLogo = c.toDataURL('image/png');
+    } catch (_) { toast('Logo tidak dapat dibaca.', 'error'); } finally { URL.revokeObjectURL(url); }
+    renderLogoUi();
+    updateQrPreview();
+  });
+  // Isi ulang data QR terakhir (disimpan di perangkat ini saja)
+  (() => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(QR_FORM_KEY)) || {}; } catch (_) { /* abaikan */ }
+    for (const [k, sel] of Object.entries(QR_FIELDS)) if (saved[k]) $(sel).value = saved[k];
+    if (saved.layout) $('#qrLayout').value = saved.layout;
+    if (typeof saved.wm === 'boolean') $('#qrWm').checked = saved.wm;
+    if (saved.logo) qrLogo = saved.logo;
+    renderLogoUi();
+  })();
+
+  // ---------- Halaman verifikasi (dibuka saat QR dipindai) ----------
+  const verifyModal = $('#verifyModal');
+  let verifyData = null;
+  function showVerify() {
+    const m = location.hash.match(/^#v=(.+)$/);
+    if (!m) return;
+    let d = null;
+    try { d = parseQrPayload(m[1]); } catch (_) { d = null; }
+    verifyData = d;
+    const body = $('#vfBody');
+    body.innerHTML = '';
+    const status = document.createElement('div');
+    status.className = 'vf-status' + (d ? '' : ' bad');
+    status.innerHTML = d ? ICON.ok : ICON.warn;
+    const st = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = d ? 'Tanda tangan elektronik terbaca' : 'QR tidak dikenali';
+    const sm = document.createElement('small');
+    sm.textContent = d ? 'Data berikut tertanam di QR saat dokumen ditandatangani dengan TTD.in.' : 'Tautan ini rusak atau bukan dari TTD.in.';
+    st.append(b, sm);
+    status.appendChild(st);
+    body.appendChild(status);
+    if (d) {
+      const rows = [['Nama', d.name], ['Jabatan', d.role], ['Instansi', d.org], ['Nomor identitas', d.nip], ['Kontak', d.contact], ['Dokumen', d.doc],
+        ['Waktu', d.time && d.time.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB'],
+        ['Sidik dokumen asli', d.hash], ['Kode', d.code]].filter(([, v]) => v);
+      const dl = document.createElement('dl');
+      dl.className = 'vf-list';
+      for (const [k, v] of rows) {
+        const dt = document.createElement('dt'); dt.textContent = k;
+        const dd = document.createElement('dd'); dd.textContent = v;
+        if (k === 'Sidik dokumen asli') dd.className = 'mono';
+        dl.append(dt, dd);
+      }
+      body.appendChild(dl);
+    }
+    $('#vfCheck').hidden = !(d && d.hash);
+    $('#vfResult').hidden = true;
+    openModal(verifyModal);
+  }
+  $('#vfCheckBtn').addEventListener('click', () => { const i = $('#vfFile'); i.value = ''; i.click(); });
+  $('#vfFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f || !verifyData) return;
+    const h = await sha256Hex(await f.arrayBuffer());
+    const same = !!h && h.slice(0, verifyData.hash.length) === verifyData.hash;
+    const r = $('#vfResult');
+    r.hidden = false;
+    r.className = 'vf-result ' + (same ? 'ok' : 'bad');
+    r.textContent = same
+      ? `Cocok. "${f.name}" adalah file asli yang ditandatangani (sebelum tanda tangan dibubuhkan).`
+      : `Tidak cocok. "${f.name}" berbeda dari dokumen asli. Catatan: file yang sudah berisi tanda tangan memang selalu berbeda, jadi cocokkan dengan file sebelum ditandatangani.`;
+  });
+  new MutationObserver(() => {
+    if (!verifyModal.classList.contains('open') && /^#v=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+  }).observe(verifyModal, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('hashchange', showVerify);
 
   // ---------- Simpan / gunakan ----------
   $('#sigApply').addEventListener('click', async () => {
@@ -1479,9 +1996,11 @@
     } else if (sigTab === 'qr') {
       const q = readQrForm();
       if (q.name) {
-        await ensureQr();
-        try { await document.fonts.load(`700 24px ${UI_FONT}`); } catch (_) { /* abaikan */ }
-        entry = { kind: 'qr', qr: q, src: renderQrImage(qrPayload(q, { doc: false }), q) };
+        entry = { kind: 'qr', qr: q, src: await qrImage(q, { doc: false }) };
+        try {
+          const { doc, color, ...form } = q;
+          localStorage.setItem(QR_FORM_KEY, JSON.stringify(form));
+        } catch (_) { /* abaikan */ }
       }
     }
     if (!entry) {
@@ -1523,9 +2042,11 @@
 
   async function doExport(kind) {
     if (!S.pdf) return;
+    if (S.pen) stopPen(true);
     if (S.sel) stopEdit(S.sel);
     select(null);
-    if (!S.els.length && !confirm('Belum ada tanda tangan pada dokumen. Tetap unduh?')) return;
+    if (!S.els.length && !confirm(S.mode === 'sign' ? 'Belum ada tanda tangan pada dokumen. Tetap unduh?' : 'Belum ada perubahan pada dokumen. Tetap unduh?')) return;
+    if (kind === 'jpg' && S.els.some((e) => e.type === 'field') && !confirm('Kolom formulir hanya berfungsi di file PDF. Pada gambar JPG, kolom tampil sebagai kotak kosong. Lanjutkan?')) return;
     if (S.signed && !confirm('Dokumen ini memiliki tanda tangan digital / e-Meterai. Jika dilanjutkan, tanda tangan digital tersebut menjadi TIDAK VALID pada file hasil. Lanjutkan?')) return;
     showLoading(kind === 'jpg' ? 'Menyiapkan gambar…' : 'Menyiapkan PDF…');
     try {
@@ -1536,14 +2057,14 @@
           if (many) showLoading(`Menyiapkan gambar… (${p.i + 1}/${S.pages.length})`);
           const c = await renderComposite(p, exportScale(p));
           const blob = await canvasToBlob(c, 'image/jpeg', 0.92);
-          download(blob, `${baseName()}-ditandatangani${many ? `-hal${p.i + 1}` : ''}.jpg`);
+          download(blob, `${baseName()}-${MODES[S.mode].suffix}${many ? `-hal${p.i + 1}` : ''}.jpg`);
           if (many) await sleep(400);
         }
         toast(many ? `Berhasil! ${S.pages.length} gambar sudah diunduh.` : 'Berhasil! Gambar sudah diunduh.', 'ok');
       } else {
         const blob = await exportPdf();
-        download(blob, `${baseName()}-ditandatangani.pdf`);
-        toast('Berhasil! Dokumen yang sudah ditandatangani sudah diunduh.', 'ok');
+        download(blob, `${baseName()}-${MODES[S.mode].suffix}.pdf`);
+        toast(S.mode === 'sign' ? 'Berhasil! Dokumen yang sudah ditandatangani sudah diunduh.' : 'Berhasil! Dokumen sudah diunduh.', 'ok');
       }
       S.dirty = false;
     } catch (err) {
@@ -1583,12 +2104,12 @@
   }
 
   /** Posisi elemen (koordinat layar) -> koordinat PDF, termasuk halaman yang diputar. */
-  function pdfRect(el, p) {
-    const [x0, y0, x1, y1] = p.view;
+  function pdfRect(el, p, flat) {
+    const [x0, y0, x1, y1] = flat ? [0, 0, p.w, p.h] : p.view;
     const u = el.x * p.w, v = el.y * p.h;
     const dw = el.w * p.w, dh = el.h * p.h;
     const vb = v + dh;
-    const rot = ((p.rotate % 360) + 360) % 360;
+    const rot = flat ? 0 : ((p.rotate % 360) + 360) % 360;
     let x, y;
     if (rot === 90) { x = x0 + vb; y = y0 + u; }
     else if (rot === 180) { x = x1 - u; y = y0 + vb; }
@@ -1597,28 +2118,77 @@
     return { x, y, width: dw, height: dh, rotate: window.PDFLib.degrees(rot) };
   }
 
+  function hexRgb(h) {
+    const n = parseInt(String(h).replace('#', ''), 16) || 0;
+    return window.PDFLib.rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+  }
+  function drawShapePdf(page, el, p) {
+    const { rgb, BlendMode } = window.PDFLib;
+    const r = pdfRect(el, p);
+    if (el.shape === 'highlight') page.drawRectangle({ ...r, color: hexRgb(el.color), opacity: 0.45, blendMode: BlendMode.Multiply });
+    else if (el.shape === 'rect') page.drawRectangle({ ...r, borderColor: hexRgb(el.color), borderWidth: 1.5 });
+    else page.drawRectangle({ ...r, color: el.shape === 'whiteout' ? rgb(1, 1, 1) : rgb(0, 0, 0) });
+  }
+
   async function exportPdf() {
-    const { PDFDocument } = window.PDFLib;
+    const { PDFDocument, rgb } = window.PDFLib;
     let doc;
     try {
       doc = await PDFDocument.load(S.bytes, { updateMetadata: false });
     } catch (e) {
-      // PDF terenkripsi / tidak standar: buat ulang dari hasil render
-      console.warn('Beralih ke mode PDF gambar:', e);
-      return exportFlatPdf();
+      // PDF terkunci izin: coba lepas enkripsinya dulu agar teks tetap bisa dipilih
+      try {
+        await loadScript('js/pdfcrypt.js');
+        doc = await PDFDocument.load((await window.PDFCrypt.decrypt(S.bytes, '')).bytes, { updateMetadata: false });
+      } catch (e2) {
+        // PDF tidak standar: buat ulang dari hasil render
+        console.warn('Beralih ke mode PDF gambar:', e, e2);
+        return exportFlatPdf();
+      }
     }
-    const pages = doc.getPages();
+    let pages = doc.getPages();
     const cache = new Map();
+    // Halaman yang disensor dijadikan gambar agar teks di bawah kotak hitam benar-benar hilang.
+    const redacted = new Set(S.els.filter((e) => e.type === 'shape' && e.shape === 'redact').map((e) => e.page));
     for (const el of S.els) {
+      if (redacted.has(el.page) || el.type === 'field') continue;
       const p = S.pages[el.page];
+      if (el.type === 'shape') { drawShapePdf(pages[el.page], el, p); continue; }
       let img;
       if (el.type === 'image') {
         img = cache.get(el.src);
-        if (!img) { img = await doc.embedPng(dataUrlToBytes(el.src)); cache.set(el.src, img); }
+        if (!img) {
+          const bytes = dataUrlToBytes(el.src);
+          img = el.src.startsWith('data:image/jpeg') ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
+          cache.set(el.src, img);
+        }
       } else {
         img = await doc.embedPng(textPng(el));
       }
       pages[el.page].drawImage(img, pdfRect(el, p));
+    }
+    for (const i of [...redacted].sort((a, b) => a - b)) {
+      const p = S.pages[i];
+      const c = await renderComposite(p, Math.min(2.5, 3500 / Math.max(p.w, p.h)), { noFields: true });
+      const jpg = new Uint8Array(await (await canvasToBlob(c, 'image/jpeg', 0.92)).arrayBuffer());
+      const np = doc.insertPage(i, [p.w, p.h]);
+      np.drawImage(await doc.embedJpg(jpg), { x: 0, y: 0, width: p.w, height: p.h });
+      doc.removePage(i + 1);
+    }
+    pages = doc.getPages();
+    const fields = S.els.filter((e) => e.type === 'field');
+    if (fields.length) {
+      const form = doc.getForm();
+      for (const el of fields) {
+        const p = S.pages[el.page];
+        const base = String(el.name || 'Kolom').replace(/\./g, '_').trim() || 'Kolom';
+        let name = base, k = 2;
+        while (form.getFieldMaybe(name)) name = `${base}_${k++}`;
+        const r = pdfRect(el, p, redacted.has(el.page));
+        const o = { x: r.x, y: r.y, width: r.width, height: r.height, rotate: r.rotate, borderColor: rgb(0.55, 0.6, 0.7), borderWidth: 0.75 };
+        if (el.field === 'check') form.createCheckBox(name).addToPage(pages[el.page], o);
+        else form.createTextField(name).addToPage(pages[el.page], o);
+      }
     }
     doc.setProducer('TTD.in');
     doc.setModificationDate(new Date());
@@ -1639,7 +2209,7 @@
   }
 
   /** Render halaman + semua elemen di atasnya menjadi satu kanvas. */
-  async function renderComposite(p, scale) {
+  async function renderComposite(p, scale, opts = {}) {
     const vp = p.page.getViewport({ scale });
     const c = document.createElement('canvas');
     c.width = Math.floor(vp.width);
@@ -1652,8 +2222,22 @@
     for (const el of S.els) {
       if (el.page !== p.i) continue;
       const x = el.x * c.width, y = el.y * c.height;
+      const w = el.w * c.width, h = el.h * c.height;
       if (el.type === 'image') {
-        ctx.drawImage(await loadImage(el.src), x, y, el.w * c.width, el.h * c.height);
+        ctx.drawImage(await loadImage(el.src), x, y, w, h);
+      } else if (el.type === 'shape') {
+        ctx.save();
+        if (el.shape === 'highlight') { ctx.globalAlpha = 0.45; ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = el.color; ctx.fillRect(x, y, w, h); }
+        else if (el.shape === 'rect') { ctx.strokeStyle = el.color; ctx.lineWidth = 1.5 * k; ctx.strokeRect(x, y, w, h); }
+        else { ctx.fillStyle = el.shape === 'whiteout' ? '#fff' : '#000'; ctx.fillRect(x, y, w, h); }
+        ctx.restore();
+      } else if (el.type === 'field') {
+        if (opts.noFields) continue;
+        ctx.save();
+        ctx.strokeStyle = '#8c99b3';
+        ctx.lineWidth = Math.max(1, 0.75 * k);
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
       } else {
         ctx.save();
         drawTextLines(ctx, el.text, el.fs * p.w * k, el.color, x, y, (k * p.w) / p.cssW);
@@ -1664,4 +2248,14 @@
   }
 
   renderLibraries();
+  showVerify();
+
+  // API kecil untuk js/tools.js (alat PDF lainnya)
+  window.TTDIN = {
+    $, $$, clamp, uid, sleep, svg, ICON, IS_FILE,
+    toast, loadScript, ensureLibs, download, loadImage, canvasToBlob, dataUrlToBytes, formatDate,
+    docxToPdf, bytesInclude, unlockPdf, askPassword, loadSaved,
+    openInEditor: (file, mode) => openFile(file, { mode }),
+    pickForEditor: (mode) => pickFile(mode),
+  };
 })();

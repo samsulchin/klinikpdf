@@ -1,6 +1,7 @@
-# TTD.in — Tanda Tangan Digital
+# TTD.in — Tanda Tangan Digital & Alat PDF
 
-Website untuk menandatangani dokumen **PDF, Word (DOCX), JPG, PNG, dan WEBP** langsung dari browser.
+Website untuk menandatangani dokumen **PDF, Word (DOCX), JPG, PNG, dan WEBP** langsung dari browser,
+plus **37 alat PDF** (gabung, pisah, kompres, konversi, kunci, OCR, dan lainnya).
 Gratis, tanpa daftar, **tanpa batas halaman**, **bisa offline**, dan **dokumen tidak pernah diunggah ke server**.
 
 Dibuat oleh **Samsul Arifin**, peneliti Artificial Intelligence, Data Science, Computer Vision, dan Biomedical
@@ -27,7 +28,29 @@ Dibuat oleh **Samsul Arifin**, peneliti Artificial Intelligence, Data Science, C
 - **e-Meterai**: panduan urutan yang benar, tautan portal resmi, dan **deteksi otomatis** PDF yang sudah
   bertanda tangan digital/e-Meterai, dengan peringatan sebelum disimpan ulang
 - PWA: bisa **dipasang** di HP/laptop dan dipakai **tanpa internet**
-- Mendukung halaman PDF yang diputar dan PDF terkunci
+- Mendukung halaman PDF yang diputar dan PDF terkunci (kata sandi diminta bila perlu)
+- Editor juga punya: sisipkan gambar, pena (coretan bebas), stabilo, kotak, tutup putih,
+  **sensor permanen** (halaman yang disensor diratakan agar teks di bawah kotak hitam benar-benar hilang),
+  serta **kolom isian & kotak centang** yang menjadi formulir PDF sungguhan
+
+## Alat PDF (menu "Alat PDF", tautan langsung `#alat/<nama-alat>`)
+
+| Kategori | Alat |
+|---|---|
+| Atur & Gabung | Atur PDF, Gabung PDF, Pisah PDF, Putar Halaman, Hapus Halaman, Ambil Halaman, Urutkan Halaman (termasuk merapikan scan bolak-balik), Halaman per Lembar (2–16), Ubah Ukuran Halaman (A4, F4, Letter, …), Potong/Crop (manual atau otomatis) |
+| Konversi | Konversi ke PDF (DOCX, gambar, TXT), Gambar ke PDF, PDF ke Word/Teks/JPG/PNG, PDF ke Gambar, Ekstrak Gambar, OCR (Indonesia + Inggris) |
+| Edit & Tanda Tangan | Tanda Tangan, Edit, Anotasi, Sensor, Buat Formulir (lewat editor), Watermark teks/logo, Nomor Halaman, Overlay/Kop Surat, Ratakan (Flatten) |
+| Optimasi & Keamanan | Kompres, Optimasi Web, Kunci PDF (AES-256), Buka Kunci (RC4/AES-128/AES-256), Perbaiki PDF, Bandingkan PDF (teks & visual) |
+| Properti Dokumen | Edit Metadata, Hapus Metadata, Preferensi Tampilan, Edit Bookmark |
+| Buat Dokumen | Buat Invoice (Rupiah), Surat Lamaran Kerja (+ gabung CV & lampiran) |
+
+Catatan batasan (karena semuanya berjalan di browser tanpa server):
+- **PDF ke Word** mode "teks bisa diedit" menyusun ulang paragraf; tabel dan kolom rumit bisa bergeser.
+  Mode "tata letak persis" menyimpan tiap halaman sebagai gambar di Word.
+- **Konversi ke PDF** belum mendukung Excel/PowerPoint dan format `.doc` lama.
+- **Optimasi Web** memperkecil gambar & memadatkan struktur, tetapi tidak melakukan linearisasi (Fast Web View).
+- **OCR** butuh versi online/terpasang (tidak bisa dari `file://`). Data bahasa (±4 MB) dimuat saat pertama dipakai,
+  lalu tersimpan untuk penggunaan offline.
 
 ### Soal e-Meterai
 
@@ -70,20 +93,24 @@ Atau lewat terminal: `npx vercel --prod`
 4. Aktifkan **SSL gratis** di panel InfinityFree (HTTPS wajib agar fitur offline/PWA aktif).
    `.htaccess` otomatis mengalihkan ke HTTPS.
 
-> Setiap kali mengubah file, naikkan `VERSION` di `sw.js` (misalnya `ttdin-v2.0.1`) supaya pengunjung
+> Setiap kali mengubah file, naikkan `VERSION` di `sw.js` (misalnya `ttdin-v3.0.1`) supaya pengunjung
 > mendapatkan versi terbaru, bukan versi lama yang tersimpan untuk offline.
 
 ## Struktur
 
 ```
-index.html            Landing page + editor (satu halaman)
+index.html            Landing page + editor + alat PDF (satu halaman)
 css/style.css         Gaya landing page
 css/editor.css        Gaya editor & modal
-js/app.js             Seluruh logika aplikasi
+css/tools.css         Gaya halaman alat PDF
+js/app.js             Editor tanda tangan, modal, dan API kecil (window.TTDIN)
+js/tools.js           Semua alat PDF (daftar alat, antarmuka, dan prosesnya)
+js/pdfcrypt.js        Enkripsi/dekripsi PDF (dimuat saat dibutuhkan)
 sw.js                 Service worker (mode offline)
 manifest.webmanifest  Data aplikasi PWA
 vendor/               pdf.js 3.11.174, pdf-lib 1.17.1, qrcode-generator 1.4.4,
-                      docx-preview 0.3.3, JSZip 3.10.1, html2canvas 1.4.1
+                      docx-preview 0.3.3, JSZip 3.10.1, html2canvas 1.4.1,
+                      tesseract.js 5.1.1 + data bahasa ind/eng (vendor/tesseract, untuk OCR)
 assets/               Logo, ikon aplikasi, font lokal (SIL OFL)
 vercel.json           Konfigurasi Vercel
 .htaccess             Konfigurasi Apache / InfinityFree

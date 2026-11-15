@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>TTD.in — Tanda Tangan Digital Gratis, Bisa Offline</title>
-  <meta name="description" content="TTD.in: tanda tangani PDF, Word, dan gambar langsung dari browser. Unggah atau buat tanda tangan (manual atau QR Code), lalu drag &amp; drop ke dokumen. Gratis, tanpa batas halaman, bisa offline, dan dokumen tidak pernah diunggah ke server.">
+  <title>TTD.in — Tanda Tangan Digital &amp; Alat PDF Gratis, Bisa Offline</title>
+  <meta name="description" content="TTD.in: tanda tangani PDF, Word, dan gambar, plus 37 alat PDF gratis: gabung, pisah, kompres, PDF ke Word, gambar ke PDF, kunci & buka kunci, OCR, watermark, nomor halaman, dan lainnya. Semua diproses di browser, bisa offline, dokumen tidak pernah diunggah.">
   <meta name="author" content="Samsul Arifin">
   <meta name="theme-color" content="#4f46e5">
-  <meta property="og:title" content="TTD.in — Tanda Tangan Digital Gratis">
-  <meta property="og:description" content="Tanda tangani PDF, Word &amp; gambar. TTD manual atau QR Code. Gratis, bisa offline, 100% privat.">
+  <meta property="og:title" content="TTD.in — Tanda Tangan Digital &amp; Alat PDF Gratis">
+  <meta property="og:description" content="Tanda tangani dokumen, gabung, kompres, konversi, dan kunci PDF. Gratis, bisa offline, 100% privat.">
   <meta property="og:type" content="website">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="stylesheet" href="assets/fonts/fonts.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/editor.css">
+  <link rel="stylesheet" href="css/tools.css">
 </head>
 <body>
 
@@ -30,6 +31,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <nav class="nav-links" id="navLinks">
+        <a href="#alat">Alat PDF</a>
         <a href="#fitur">Fitur</a>
         <a href="#cara">Cara Pakai</a>
         <a href="#meterai">e-Meterai</a>
@@ -64,6 +66,14 @@
               Siapkan Tanda Tangan
             </button>
           </div>
+          <a href="#alat" class="hero-tools">
+            <span class="hero-tools-icons" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1"/><rect x="9" y="3" width="11" height="14" rx="2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            <span>Gabung, kompres, konversi, atau kunci PDF? <b><span id="toolCount">37</span> alat PDF gratis &rarr;</b></span>
+          </a>
           <div class="hero-trust">
             <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Diproses di perangkat Anda</span>
             <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/><path d="m2 2 20 20"/></svg>Bisa tanpa internet</span>
@@ -104,6 +114,25 @@
       </div>
     </section>
 
+    <!-- Alat PDF -->
+    <section class="section section-alt" id="alat">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Alat PDF</span>
+          <h2>Semua alat PDF dalam satu tempat</h2>
+          <p>Gabung, pisah, kompres, konversi, kunci, OCR, dan banyak lagi. Semuanya gratis, tanpa batas, dan diproses di perangkat Anda tanpa unggah ke server.</p>
+        </div>
+        <div class="tgrid-tools">
+          <div class="tsearch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="toolSearch" placeholder="Cari alat, mis. kompres, Word, kunci…" aria-label="Cari alat PDF" autocomplete="off">
+          </div>
+          <div class="tchips" id="toolCats" role="toolbar" aria-label="Kategori alat"></div>
+        </div>
+        <div class="tgrid" id="toolGrid"></div>
+      </div>
+    </section>
+
     <!-- Fitur -->
     <section class="section" id="fitur">
       <div class="container">
@@ -126,7 +155,7 @@
           <div class="feature">
             <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></div>
             <h3>Tanda tangan QR Code</h3>
-            <p>QR berisi nama, jabatan, instansi, nama dokumen, waktu, dan sidik SHA-256 dokumen. Bisa dipindai dengan kamera HP mana pun.</p>
+            <p>Pindai dengan kamera HP mana pun untuk membuka halaman verifikasi berisi nama, jabatan, instansi, dokumen, dan waktu. Bisa diberi logo instansi di tengahnya.</p>
           </div>
           <div class="feature">
             <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></div>
@@ -198,7 +227,7 @@
         <div>
           <span class="eyebrow">Tanda Tangan QR Code</span>
           <h2 class="split-title">Tanda tangan yang bisa dipindai</h2>
-          <p class="split-lead">Cocok untuk surat keterangan, lembar pengesahan, sertifikat, atau dokumen internal. Saat QR dipindai dengan kamera HP, muncul informasi penandatangan:</p>
+          <p class="split-lead">Cocok untuk surat keterangan, lembar pengesahan, sertifikat, atau dokumen internal. Tambahkan logo instansi di tengah QR dan keterangan penanda tangan di sampingnya. Saat dipindai kamera HP, terbuka halaman verifikasi berisi:</p>
           <ul class="checklist">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>Nama, jabatan, dan instansi penandatangan</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>Nama dokumen &amp; waktu penandatanganan</li>
@@ -295,6 +324,10 @@
             <p>Ya. Semua fitur bisa dipakai gratis tanpa batas jumlah dokumen, tanpa batas halaman, dan tanpa watermark.</p>
           </details>
           <details>
+            <summary>Selain tanda tangan, alat PDF apa saja yang tersedia?</summary>
+            <p>Ada 37 alat: atur, gabung, pisah, putar, hapus, ambil, dan urutkan halaman; halaman per lembar, ubah ukuran kertas, potong (crop); konversi Word/gambar/teks ke PDF, PDF ke Word/teks/gambar, ekstrak gambar, OCR; edit, anotasi, sensor, formulir isian, watermark, nomor halaman, kop surat (overlay), ratakan; kompres, optimasi web, kunci &amp; buka kunci, perbaiki, bandingkan PDF; edit metadata, bookmark, dan preferensi tampilan; serta pembuat invoice dan surat lamaran kerja. Semuanya diproses di perangkat Anda.</p>
+          </details>
+          <details>
             <summary>Apakah dokumen saya aman?</summary>
             <p>Dokumen Anda tidak pernah diunggah. File dibuka dan diproses langsung oleh browser di perangkat Anda. Begitu tab ditutup, tidak ada salinan dokumen yang tertinggal di mana pun selain file hasil unduhan Anda sendiri.</p>
           </details>
@@ -308,7 +341,7 @@
           </details>
           <details>
             <summary>Apa isi tanda tangan QR Code?</summary>
-            <p>QR berisi teks yang bisa dibaca kamera HP mana pun: nama, jabatan, instansi, kontak (opsional), nama dokumen, waktu penandatanganan, sidik SHA-256 dokumen asli, dan kode unik. QR ini adalah tanda identitas penandatangan, <b>bukan</b> sertifikat elektronik dari PSrE.</p>
+            <p>QR berisi tautan ke halaman verifikasi TTD.in. Saat dipindai kamera HP, terbuka halaman berisi nama, jabatan, instansi, nomor identitas &amp; kontak (opsional), nama dokumen, waktu penandatanganan, sidik dokumen asli, dan kode unik. Datanya tersimpan di dalam QR itu sendiri, jadi tidak ada database dan tidak ada yang dikirim ke server. QR ini adalah tanda identitas penandatangan, <b>bukan</b> sertifikat elektronik dari PSrE seperti BSrE.</p>
           </details>
           <details>
             <summary>Apakah TTD.in bisa membubuhkan e-Meterai?</summary>
@@ -343,6 +376,7 @@
           <a href="#" class="logo"><img src="assets/favicon.svg" alt=""><span>TTD<em>.in</em></span></a>
           <p>Tanda tangan digital gratis untuk semua orang. Mudah, cepat, privat, dan bisa offline.</p>
           <div class="footer-links">
+            <a href="#alat">Alat PDF</a>
             <a href="#fitur">Fitur</a>
             <a href="#cara">Cara Pakai</a>
             <a href="#meterai">e-Meterai</a>
@@ -439,8 +473,8 @@
       </section>
 
       <section class="tools-main">
-        <h4>Tambahkan</h4>
         <div class="tool-grid">
+          <h4 class="tg-head">Tambahkan</h4>
           <button class="tool" id="toolText">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
             Teks
@@ -457,6 +491,40 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             Silang
           </button>
+          <button class="tool" id="toolImage">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+            Gambar
+          </button>
+          <button class="tool" id="toolPen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-3 4-9 6-9s1 7 3 7 2-4 4-4 2 3 5 3"/></svg>
+            Pena
+          </button>
+          <h4 class="tg-head">Edit &amp; anotasi</h4>
+          <button class="tool" id="toolHighlight">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+            Stabilo
+          </button>
+          <button class="tool" id="toolRect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/></svg>
+            Kotak
+          </button>
+          <button class="tool" id="toolWhiteout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1.5" stroke-dasharray="3 2"/><path d="M7 12h10" opacity=".35"/></svg>
+            Tutup Putih
+          </button>
+          <button class="tool" id="toolRedact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1.5" fill="currentColor"/></svg>
+            Sensor
+          </button>
+          <h4 class="tg-head">Formulir</h4>
+          <button class="tool" id="toolField">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 10v4"/></svg>
+            Kolom Teks
+          </button>
+          <button class="tool" id="toolCheckbox">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 12 3 3 5-6"/></svg>
+            Kotak Centang
+          </button>
           <button class="tool tool-meterai" id="toolMeterai">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="3 3"/><path d="M8 12h8M12 8v8"/></svg>
             e-Meterai
@@ -472,6 +540,19 @@
     <div class="ed-stage" id="stage">
       <div class="ed-pages" id="pages"></div>
     </div>
+    <div class="pen-bar" id="penBar" hidden>
+      <button class="pen-sw active" data-pen-color="#111827" style="background:#111827" aria-label="Hitam"></button>
+      <button class="pen-sw" data-pen-color="#1d4ed8" style="background:#1d4ed8" aria-label="Biru"></button>
+      <button class="pen-sw" data-pen-color="#b91c1c" style="background:#b91c1c" aria-label="Merah"></button>
+      <span class="pen-sep"></span>
+      <button class="pen-w" data-pen-width="1.2" aria-label="Tipis"><i style="height:2px"></i></button>
+      <button class="pen-w active" data-pen-width="2" aria-label="Sedang"><i style="height:3px"></i></button>
+      <button class="pen-w" data-pen-width="4" aria-label="Tebal"><i style="height:5px"></i></button>
+      <span class="pen-sep"></span>
+      <button class="pen-btn" data-pen-act="undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg><span>Urungkan</span></button>
+      <button class="pen-btn pen-done" data-pen-act="done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Selesai</span></button>
+    </div>
+    <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
     <div class="ed-loading" id="loading"><div><div class="spinner"></div><p id="loadingText">Membuka dokumen…</p></div></div>
   </div>
 
@@ -479,6 +560,103 @@
     <button id="zoomOut" aria-label="Perkecil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
     <span id="zoomVal">100%</span>
     <button id="zoomIn" aria-label="Perbesar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  </div>
+</div>
+
+<!-- ======================= ALAT PDF ======================= -->
+<div class="tv" id="toolView" aria-label="Alat PDF">
+  <header class="tv-top">
+    <a href="#alat" class="logo" id="tvHome" title="Kembali ke beranda"><img src="assets/favicon.svg" alt=""><span>TTD<em>.in</em></span></a>
+    <button class="btn btn-ghost btn-sm tv-back" id="tvBack">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+      Semua alat
+    </button>
+    <div class="ed-spacer"></div>
+    <span class="ed-secure"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Diproses lokal</span>
+  </header>
+  <div class="tv-scroll" id="tvScroll">
+    <div class="tv-wrap">
+      <div class="tv-head">
+        <div class="tv-icon" id="tvIcon"></div>
+        <div><h1 id="tvTitle"></h1><p id="tvDesc"></p></div>
+      </div>
+      <div class="tv-drop" id="tvDrop" tabindex="0" role="button" aria-label="Pilih atau tarik file ke sini">
+        <div class="dropzone-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+        </div>
+        <h3 id="tvDropTitle">Pilih file PDF</h3>
+        <p id="tvDropSub">atau tarik &amp; lepas file ke sini</p>
+        <span class="btn btn-primary">Pilih File</span>
+        <div class="formats" id="tvFormats"></div>
+      </div>
+      <div class="tv-work" id="tvWork" hidden>
+        <div class="tv-main" id="tvMain"></div>
+        <aside class="tv-side">
+          <div class="tv-opts" id="tvOpts"></div>
+          <button class="btn btn-primary btn-lg tv-run" id="tvRun">Proses</button>
+          <p class="tv-privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>File diproses di perangkat Anda dan tidak diunggah ke mana pun.</p>
+        </aside>
+      </div>
+      <div class="tv-done" id="tvDone" hidden></div>
+      <section class="tv-related">
+        <h3>Alat lainnya</h3>
+        <div class="tcards tcards-sm" id="tvRelated"></div>
+      </section>
+    </div>
+  </div>
+  <div class="tv-dropover" aria-hidden="true"><div>Lepaskan file di sini</div></div>
+  <div class="tv-busy" role="status" aria-live="polite">
+    <div class="tv-busy-card">
+      <div class="spinner"></div>
+      <p id="tvBusyText">Memproses…</p>
+      <div class="tv-bar indet"><span id="tvBusyBar"></span></div>
+    </div>
+  </div>
+</div>
+<input type="file" id="toolInput" hidden multiple>
+
+<!-- ======================= VERIFIKASI QR ======================= -->
+<div class="modal" id="verifyModal" role="dialog" aria-modal="true" aria-labelledby="vfTitle">
+  <div class="modal-card modal-sm">
+    <div class="modal-head">
+      <h3 id="vfTitle">Verifikasi Tanda Tangan</h3>
+      <button class="icon-btn" data-close aria-label="Tutup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="vfBody"></div>
+      <div class="vf-check" id="vfCheck" hidden>
+        <p>Punya file asli dokumennya (sebelum ditandatangani)? Cocokkan sidiknya di perangkat Anda:</p>
+        <button type="button" class="btn btn-outline btn-sm" id="vfCheckBtn">Cocokkan file asli</button>
+        <input type="file" id="vfFile" hidden>
+        <p class="vf-result" id="vfResult" hidden></p>
+      </div>
+      <p class="pane-note">Ini tanda tangan elektronik <b>tidak tersertifikasi</b> (UU ITE &amp; PP 71/2019). Pastikan data di atas sesuai dengan dokumen yang Anda terima. Untuk keabsahan tersertifikasi, gunakan layanan PSrE resmi seperti BSrE.</p>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn btn-primary" data-close>Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL KATA SANDI ======================= -->
+<div class="modal" id="pwModal" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+  <div class="modal-card modal-sm">
+    <div class="modal-head">
+      <h3 id="pwTitle">PDF dikunci kata sandi</h3>
+      <button class="icon-btn" data-close aria-label="Tutup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <p class="pane-intro" id="pwText"></p>
+      <input class="field" type="password" id="pwInput" autocomplete="off" aria-label="Kata sandi PDF">
+      <p class="pw-err" id="pwErr" hidden>Kata sandi salah, silakan coba lagi.</p>
+      <p class="pane-note">Kata sandi hanya dipakai di perangkat ini untuk membuka file, tidak dikirim ke mana pun.</p>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn btn-ghost" data-close>Batal</button>
+      <button class="btn btn-primary" id="pwOk">Buka</button>
+    </div>
   </div>
 </div>
 
@@ -539,13 +717,29 @@
             <label class="fl"><span>Nama lengkap <em>*</em></span><input class="field" id="qrName" type="text" maxlength="80" placeholder="Contoh: Samsul Arifin" autocomplete="name"></label>
             <label class="fl">Jabatan<input class="field" id="qrRole" type="text" maxlength="80" placeholder="Contoh: Ketua Panitia"></label>
             <label class="fl">Instansi / organisasi<input class="field" id="qrOrg" type="text" maxlength="100" placeholder="Contoh: Universitas …" autocomplete="organization"></label>
+            <label class="fl"><span>Nomor identitas <span class="opt">(opsional)</span></span><input class="field" id="qrNip" type="text" maxlength="60" placeholder="Contoh: NIP. 197104251994122001"></label>
             <label class="fl"><span>Email / website <span class="opt">(opsional)</span></span><input class="field" id="qrContact" type="text" maxlength="120" placeholder="nama@email.com"></label>
-            <label class="check"><input type="checkbox" id="qrDoc" checked> Sertakan info dokumen (nama file, waktu, sidik SHA-256)</label>
-            <label class="check"><input type="checkbox" id="qrCaption" checked> Tampilkan nama di bawah QR</label>
+            <div class="fl"><span>Logo instansi di tengah QR <span class="opt">(opsional)</span></span>
+              <div class="qr-logo">
+                <img id="qrLogoPrev" alt="Logo" hidden>
+                <button type="button" class="btn btn-outline btn-sm" id="qrLogoBtn">Pilih logo</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="qrLogoDel" hidden>Hapus</button>
+              </div>
+              <input type="file" id="qrLogoFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+            </div>
+            <label class="fl">Tampilan
+              <select class="field" id="qrLayout">
+                <option value="side">QR + keterangan di samping (gaya surat dinas)</option>
+                <option value="below">QR + nama di bawah</option>
+                <option value="none">QR saja</option>
+              </select>
+            </label>
+            <label class="check" id="qrWmWrap" hidden><input type="checkbox" id="qrWm" checked> Logo samar di belakang keterangan</label>
+            <label class="check"><input type="checkbox" id="qrDoc" checked> Sertakan info dokumen (nama file, waktu, sidik dokumen)</label>
           </div>
           <div class="qr-preview">
             <img id="qrPreview" alt="Pratinjau QR Code">
-            <small>Saat ditempel ke dokumen, QR otomatis dilengkapi info dokumen &amp; kode unik.</small>
+            <small>Saat dipindai kamera HP, QR membuka halaman verifikasi berisi data penanda tangan &amp; dokumen.</small>
           </div>
         </div>
       </div>
@@ -591,5 +785,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/app.js"></script>
+<script src="js/tools.js"></script>
 </body>
 </html>
