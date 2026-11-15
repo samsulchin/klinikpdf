@@ -1,5 +1,5 @@
 /* ==========================================================
-   TTD.in — Aplikasi tanda tangan digital (100% di browser)
+   KlinikPDF — Aplikasi tanda tangan digital (100% di browser)
    Dibuat oleh Samsul Arifin — https://github.com/samsulchin
    Library: pdf.js, pdf-lib, qrcode-generator, docx-preview,
             JSZip, html2canvas (semua disimpan lokal di /vendor)
@@ -208,7 +208,7 @@
   window.addEventListener('appinstalled', () => {
     installPrompt = null;
     $$('[data-install]').forEach((b) => { b.hidden = true; });
-    toast('TTD.in terpasang! Sekarang bisa dibuka tanpa internet.', 'ok');
+    toast('KlinikPDF terpasang! Sekarang bisa dibuka tanpa internet.', 'ok');
   });
   $$('[data-install]').forEach((b) => b.addEventListener('click', async () => {
     if (!installPrompt) return;
@@ -1693,7 +1693,7 @@
     if (!/^https?:$/.test(location.protocol)) return '';
     return location.origin + location.pathname.replace(/index\.html$/, '');
   }
-  /** Versi lama: teks biasa. Dipakai hanya jika TTD.in dibuka langsung dari file di komputer. */
+  /** Versi lama: teks biasa. Dipakai hanya jika KlinikPDF dibuka langsung dari file di komputer. */
   function qrTextPayload(q, opts = {}) {
     const L = ['DITANDATANGANI SECARA ELEKTRONIK', 'Nama: ' + (q.name || '-')];
     if (q.role) L.push('Jabatan: ' + q.role);
@@ -1942,7 +1942,7 @@
     const b = document.createElement('b');
     b.textContent = d ? 'Tanda tangan elektronik terbaca' : 'QR tidak dikenali';
     const sm = document.createElement('small');
-    sm.textContent = d ? 'Data berikut tertanam di QR saat dokumen ditandatangani dengan TTD.in.' : 'Tautan ini rusak atau bukan dari TTD.in.';
+    sm.textContent = d ? 'Data berikut tertanam di QR saat dokumen ditandatangani dengan KlinikPDF.' : 'Tautan ini rusak atau bukan dari KlinikPDF.';
     st.append(b, sm);
     status.appendChild(st);
     body.appendChild(status);
@@ -2190,7 +2190,7 @@
         else form.createTextField(name).addToPage(pages[el.page], o);
       }
     }
-    doc.setProducer('TTD.in');
+    doc.setProducer('KlinikPDF');
     doc.setModificationDate(new Date());
     return new Blob([await doc.save()], { type: 'application/pdf' });
   }
@@ -2204,7 +2204,7 @@
       const page = doc.addPage([p.w, p.h]);
       page.drawImage(await doc.embedJpg(jpg), { x: 0, y: 0, width: p.w, height: p.h });
     }
-    doc.setProducer('TTD.in');
+    doc.setProducer('KlinikPDF');
     return new Blob([await doc.save()], { type: 'application/pdf' });
   }
 

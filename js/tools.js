@@ -1,5 +1,5 @@
 /* ==========================================================
-   TTD.in — Alat PDF lengkap (100% diproses di browser)
+   KlinikPDF — Alat PDF lengkap (100% diproses di browser)
    Gabung, pisah, kompres, konversi, kunci, OCR, watermark, dll.
    Bergantung pada API kecil dari app.js (window.TTDIN).
    ========================================================== */
@@ -62,8 +62,8 @@
   async function newDoc() {
     await ensureLibs();
     const d = await lib().PDFDocument.create();
-    d.setProducer('TTD.in');
-    d.setCreator('TTD.in');
+    d.setProducer('KlinikPDF');
+    d.setCreator('KlinikPDF');
     return d;
   }
   async function saveDoc(doc, opts) { return pdfBlob(await doc.save(opts)); }
@@ -593,7 +593,7 @@
     const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     zip.file('[Content_Types].xml', X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
     zip.file('_rels/.rels', X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
-    zip.file('docProps/core.xml', X + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEsc(title)}</dc:title><dc:creator>TTD.in</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</dcterms:created></cp:coreProperties>`);
+    zip.file('docProps/core.xml', X + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEsc(title)}</dc:title><dc:creator>KlinikPDF</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</dcterms:created></cp:coreProperties>`);
     zip.file('word/styles.xml', X + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="id-ID"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="80" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>');
     let rels = '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
     images.forEach((im, i) => {
@@ -1113,7 +1113,7 @@
   };
 
   OPS.ocr = async (ctx) => {
-    if (T.IS_FILE) throw userErr('OCR memerlukan TTD.in versi online atau yang sudah dipasang sebagai aplikasi (tidak bisa dari file lokal).');
+    if (T.IS_FILE) throw userErr('OCR memerlukan KlinikPDF versi online atau yang sudah dipasang sebagai aplikasi (tidak bisa dari file lokal).');
     const o = ctx.opt;
     ctx.progress('Memuat mesin OCR…');
     await loadScript('vendor/tesseract/tesseract.min.js');
@@ -1493,7 +1493,7 @@
       permissions: { print: o.print, copy: o.copy, modify: o.modify, annotate: o.annotate },
     });
     const res = [{ name: `${baseOf(f.name)}-terkunci.pdf`, blob: pdfBlob(bytes) }];
-    res.note = 'PDF dikunci dengan AES-256. Simpan kata sandinya baik-baik: tanpa kata sandi, file tidak bisa dibuka (juga oleh TTD.in).';
+    res.note = 'PDF dikunci dengan AES-256. Simpan kata sandinya baik-baik: tanpa kata sandi, file tidak bisa dibuka (juga oleh KlinikPDF).';
     return res;
   };
   OPS.unlock = async (ctx) => {
@@ -2180,7 +2180,7 @@
     if (tool.input === 'none') { cur.state = 'work'; initCustomState(); }
     document.body.classList.add('tooling');
     if (push) history.pushState({ ttdin: 'tool', id }, '', '#alat/' + id);
-    document.title = `${tool.name} — TTD.in`;
+    document.title = `${tool.name} — KlinikPDF`;
     render();
     scroller.scrollTop = 0;
   }

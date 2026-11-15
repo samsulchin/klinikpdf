@@ -1,4 +1,4 @@
-// Server statis sederhana untuk menjalankan TTD.in di komputer sendiri.
+// Server statis sederhana untuk menjalankan KlinikPDF di komputer sendiri.
 // Jalankan: npm start  (lalu buka http://localhost:5173)
 const http = require('http');
 const fs = require('fs');
@@ -36,4 +36,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream' });
     res.end(data);
   });
-}).listen(PORT, () => console.log(`TTD.in berjalan di http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`KlinikPDF berjalan di http://localhost:${PORT}`));

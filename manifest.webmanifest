@@ -1,7 +1,7 @@
 {
-  "name": "TTD.in — Tanda Tangan Digital",
-  "short_name": "TTD.in",
-  "description": "Tanda tangani PDF, Word & gambar. TTD manual atau QR Code. Gratis, bisa offline, dan privat.",
+  "name": "KlinikPDF — Tanda Tangan & Alat PDF",
+  "short_name": "KlinikPDF",
+  "description": "Tanda tangani dokumen dan kelola PDF: gabung, kompres, konversi, kunci, OCR. Gratis, bisa offline, dan privat.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

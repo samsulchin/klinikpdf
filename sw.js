@@ -1,6 +1,6 @@
-/* TTD.in — Service worker: menyimpan semua file aplikasi agar bisa dipakai offline.
+/* KlinikPDF — Service worker: menyimpan semua file aplikasi agar bisa dipakai offline.
    Naikkan VERSION setiap kali ada perubahan file supaya pengguna mendapat versi terbaru. */
-const VERSION = 'ttdin-v3.1.0';
+const VERSION = 'klinikpdf-v3.2.0';
 // Mesin OCR (vendor/tesseract, ±12 MB) tidak ikut disimpan di awal: disimpan otomatis saat pertama dipakai.
 const ASSETS = [
   './',

@@ -1,7 +1,7 @@
 {
-  "name": "ttd-in",
+  "name": "klinikpdf",
   "version": "1.0.0",
-  "description": "TTD.in — tanda tangan digital gratis untuk PDF & gambar, diproses 100% di browser.",
+  "description": "KlinikPDF — tanda tangan digital & alat PDF gratis, diproses 100% di browser.",
   "private": true,
   "scripts": {
     "start": "node server.js"

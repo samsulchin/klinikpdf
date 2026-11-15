@@ -1,5 +1,5 @@
 /* ==========================================================
-   TTD.in — Enkripsi & dekripsi PDF (Standard Security Handler)
+   KlinikPDF — Enkripsi & dekripsi PDF (Standard Security Handler)
    - Kunci: AES-256 (PDF 2.0 / revisi 6), didukung semua pembaca modern
    - Buka:  RC4 40/128-bit, AES-128, AES-256 (revisi 2–6)
    Berjalan 100% di browser memakai pdf-lib + WebCrypto.

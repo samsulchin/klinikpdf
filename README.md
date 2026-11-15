@@ -1,4 +1,4 @@
-# TTD.in — Tanda Tangan Digital & Alat PDF
+# KlinikPDF — Tanda Tangan Digital & Alat PDF
 
 Website untuk menandatangani dokumen **PDF, Word (DOCX), JPG, PNG, dan WEBP** langsung dari browser,
 plus **37 alat PDF** (gabung, pisah, kompres, konversi, kunci, OCR, dan lainnya).
@@ -56,8 +56,8 @@ Catatan batasan (karena semuanya berjalan di browser tanpa server):
 
 e-Meterai resmi hanya diterbitkan **Peruri** melalui distributor resmi (misalnya [e-meterai.co.id](https://e-meterai.co.id/)).
 Setiap meterai punya nomor seri dan tanda tangan digital, dan membuat meterai tiruan melanggar
-UU No. 10 Tahun 2020 tentang Bea Meterai. Karena itu TTD.in **tidak membuat meterai**. Urutan yang benar:
-tanda tangani di TTD.in → unduh PDF → bubuhkan e-Meterai di portal resmi → jangan edit lagi.
+UU No. 10 Tahun 2020 tentang Bea Meterai. Karena itu KlinikPDF **tidak membuat meterai**. Urutan yang benar:
+tanda tangani di KlinikPDF → unduh PDF → bubuhkan e-Meterai di portal resmi → jangan edit lagi.
 
 ## Pakai sendiri secara offline
 
@@ -93,7 +93,7 @@ Atau lewat terminal: `npx vercel --prod`
 4. Aktifkan **SSL gratis** di panel InfinityFree (HTTPS wajib agar fitur offline/PWA aktif).
    `.htaccess` otomatis mengalihkan ke HTTPS.
 
-> Setiap kali mengubah file, naikkan `VERSION` di `sw.js` (misalnya `ttdin-v3.0.1`) supaya pengunjung
+> Setiap kali mengubah file, naikkan `VERSION` di `sw.js` (misalnya `klinikpdf-v3.2.1`) supaya pengunjung
 > mendapatkan versi terbaru, bukan versi lama yang tersimpan untuk offline.
 
 ## Struktur
@@ -119,6 +119,6 @@ server.js             Server lokal sederhana
 
 ## Catatan hukum
 
-Tanda tangan dari TTD.in (gambar maupun QR) termasuk **tanda tangan elektronik tidak tersertifikasi**
+Tanda tangan dari KlinikPDF (gambar maupun QR) termasuk **tanda tangan elektronik tidak tersertifikasi**
 (UU ITE & PP No. 71 Tahun 2019). Untuk dokumen yang mewajibkan tanda tangan elektronik tersertifikasi,
 gunakan layanan PSrE yang diakui pemerintah.
