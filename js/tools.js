@@ -40,16 +40,35 @@
     if (t === 'application/pdf' || e === 'pdf') return 'pdf';
     if (/^image\/(png|jpe?g|webp|gif|bmp)$/.test(t) || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(e)) return 'img';
     if (e === 'docx' || t.includes('wordprocessingml')) return 'docx';
-    if (/^text\//.test(t) || ['txt', 'md', 'csv', 'log', 'json', 'xml'].includes(e)) return 'txt';
+    if (['xlsx', 'xlsm', 'csv', 'tsv'].includes(e) || t.includes('spreadsheetml') || t === 'text/csv') return 'sheet';
+    if (['pptx', 'ppsx'].includes(e) || t.includes('presentationml')) return 'pptx';
+    if (/^text\//.test(t) || ['txt', 'md', 'log', 'json', 'xml'].includes(e)) return 'txt';
     return null;
   }
   const ACCEPT = {
     pdf: '.pdf,application/pdf',
     img: '.jpg,.jpeg,.png,.webp,.gif,.bmp,image/*',
     docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    txt: '.txt,.md,.csv,.log,.json,.xml,text/plain',
+    txt: '.txt,.md,.log,.json,.xml,text/plain',
+    sheet: '.xlsx,.xlsm,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
+    pptx: '.pptx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
   };
-  const KIND_LABEL = { pdf: ['PDF'], img: ['JPG', 'PNG', 'WEBP'], docx: ['DOCX'], txt: ['TXT'] };
+  const KIND_LABEL = { pdf: ['PDF'], img: ['JPG', 'PNG', 'WEBP'], docx: ['DOCX'], txt: ['TXT'], sheet: ['XLSX', 'CSV'], pptx: ['PPTX'] };
+  /** Pesan untuk format Office lama (biner) yang tidak bisa dibaca di browser. */
+  function legacyHint(name) {
+    const e = extOf(name);
+    const map = { doc: ['Word', '.docx'], xls: ['Excel', '.xlsx'], ppt: ['PowerPoint', '.pptx'], pps: ['PowerPoint', '.pptx'] };
+    if (!map[e]) return '';
+    return `Format .${e} (${map[e][0]} lama) belum didukung. Buka di ${map[e][0]}, lalu Simpan Sebagai ${map[e][1]}.`;
+  }
+  async function ensureOffice() {
+    await ensureLibs();
+    await loadScript('vendor/jszip.min.js');
+    await loadScript('js/office.js');
+    return window.KlinikOffice;
+  }
+  const SHEET_DEFAULTS = { sheets: 'all', fit: 'width', paper: 'auto', orient: 'auto', grid: 'auto', locale: 'id', header: true };
+  const PPT_DEFAULTS = { dpi: 150, hidden: false };
 
   async function pdfjsDoc(bytes) {
     await ensureLibs();
@@ -1024,6 +1043,8 @@
       ctx.progress(`Mengonversi ${f.name}…`, i / ctx.files.length);
       let bytes;
       if (f.kind === 'docx') bytes = await T.docxToPdf(f.file, (a, b) => ctx.progress(`Mengonversi ${f.name} (${a}/${b})…`, i / ctx.files.length));
+      else if (f.kind === 'sheet') bytes = await (await ensureOffice()).sheetToPdf(f.file, SHEET_DEFAULTS, (m) => ctx.progress(`${f.name}: ${m}`, i / ctx.files.length));
+      else if (f.kind === 'pptx') bytes = await (await ensureOffice()).pptxToPdf(f.file, PPT_DEFAULTS, (m) => ctx.progress(`${f.name}: ${m}`, i / ctx.files.length));
       else if (f.kind === 'txt') bytes = await textToPdf(await f.file.text());
       else if (f.kind === 'img') { const d = await newDoc(); await addImagePage(d, f.file, { size: 'fit' }); bytes = await d.save(); }
       else bytes = f.bytes;
@@ -1039,6 +1060,34 @@
     }
     return parts.map((p) => ({ name: baseOf(p.name) + '.pdf', blob: pdfBlob(p.bytes) }));
   };
+
+  /** Excel/CSV atau PowerPoint → PDF (satu PDF per file, atau digabung). */
+  async function officeToPdf(ctx, kind) {
+    const Off = await ensureOffice();
+    const o = { ...(kind === 'sheet' ? SHEET_DEFAULTS : PPT_DEFAULTS), ...ctx.opt };
+    const conv = (f, i) => {
+      const prog = (m, fr) => ctx.progress(ctx.files.length > 1 ? `${f.name}: ${m}` : m, (i + (fr || 0)) / ctx.files.length);
+      return kind === 'sheet' ? Off.sheetToPdf(f.file, o, prog) : Off.pptxToPdf(f.file, o, prog);
+    };
+    const parts = [];
+    for (let i = 0; i < ctx.files.length; i++) parts.push({ name: ctx.files[i].name, bytes: await conv(ctx.files[i], i) });
+    let res;
+    if (parts.length > 1 && o.merge) {
+      ctx.progress('Menggabungkan PDF…', 0.98);
+      const out = await newDoc();
+      for (const p of parts) {
+        const src = await loadDoc(p.bytes);
+        (await out.copyPages(src, src.getPageIndices())).forEach((pg) => out.addPage(pg));
+      }
+      res = [{ name: kind === 'sheet' ? 'spreadsheet.pdf' : 'presentasi.pdf', blob: await saveDoc(out) }];
+    } else res = parts.map((p) => ({ name: baseOf(p.name) + '.pdf', blob: pdfBlob(p.bytes) }));
+    res.note = kind === 'sheet'
+      ? 'Grafik (chart) di dalam Excel belum ikut dikonversi. Jika tabel terlalu kecil atau terpotong, coba ubah pilihan "Skala" atau "Orientasi".'
+      : 'Setiap slide disimpan sebagai gambar beresolusi tinggi, dengan lapisan teks agar PDF tetap bisa dicari. Animasi, video, dan huruf yang tidak terpasang di perangkat ini bisa tampil berbeda.';
+    return res;
+  }
+  OPS.sheet2pdf = (ctx) => officeToPdf(ctx, 'sheet');
+  OPS.ppt2pdf = (ctx) => officeToPdf(ctx, 'pptx');
 
   OPS.img2pdf = async (ctx) => {
     const o = ctx.opt;
@@ -1882,6 +1931,8 @@
     bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
     form: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h4"/><rect x="7" y="15" width="3" height="3" rx=".5"/><path d="M13 16.5h4"/>',
     job: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 13h20"/>',
+    sheet: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+    slides: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M12 17v4M8 21h8"/><path d="M7 13l3-3 2 2 4-4"/>',
   };
   const CATS = [['atur', 'Atur & Gabung'], ['konversi', 'Konversi'], ['edit', 'Edit & Tanda Tangan'], ['aman', 'Optimasi & Keamanan'], ['info', 'Properti Dokumen'], ['buat', 'Buat Dokumen']];
   const PAGES_OPT = (label = 'Halaman yang diproses') => ({ id: 'pages', type: 'text', label, placeholder: 'Kosongkan untuk semua, mis. 1-3, 5', value: '' });
@@ -1927,8 +1978,26 @@
         PAGES_OPT(),
       ] },
 
-    { id: 'konversi-ke-pdf', cat: 'konversi', icon: 'toPdf', name: 'Konversi ke PDF', desc: 'Ubah Word (DOCX), gambar, dan teks menjadi PDF.', accept: ['docx', 'img', 'txt'], multiple: true, view: 'files', run: OPS.toPdf, runLabel: 'Konversi ke PDF',
+    { id: 'konversi-ke-pdf', cat: 'konversi', icon: 'toPdf', name: 'Konversi ke PDF', desc: 'Ubah Word, Excel, PowerPoint, gambar, dan teks menjadi PDF.', accept: ['docx', 'sheet', 'pptx', 'img', 'txt'], multiple: true, view: 'files', run: OPS.toPdf, runLabel: 'Konversi ke PDF',
       options: [{ id: 'merge', type: 'check', label: 'Gabungkan semua menjadi satu PDF', value: true, show: (o, c) => c.files.length > 1 }] },
+    { id: 'excel-ke-pdf', cat: 'konversi', icon: 'sheet', name: 'Excel ke PDF', desc: 'Ubah spreadsheet Excel (XLSX) atau CSV menjadi PDF rapi siap cetak.', accept: ['sheet'], multiple: true, view: 'files', run: OPS.sheet2pdf, runLabel: 'Konversi ke PDF',
+      options: [
+        { id: 'fit', type: 'select', label: 'Skala', choices: [['width', 'Muat semua kolom selebar halaman'], ['page', 'Muat satu sheet di satu halaman'], ['file', 'Ikuti pengaturan cetak Excel'], ['none', 'Ukuran asli (100%)']], value: 'width' },
+        { id: 'paper', type: 'select', label: 'Ukuran kertas', choices: [['auto', 'Ikuti file (CSV: A4)'], ...PAPER_CHOICES], value: 'auto' },
+        { id: 'orient', type: 'seg', label: 'Orientasi', choices: [['auto', 'Otomatis'], ['portrait', 'Tegak'], ['landscape', 'Mendatar']], value: 'auto' },
+        { id: 'sheets', type: 'seg', label: 'Sheet', choices: [['all', 'Semua sheet'], ['active', 'Sheet aktif saja']], value: 'all', show: (o, c) => c.files.some((f) => !/\.(csv|tsv)$/i.test(f.name)) },
+        { id: 'grid', type: 'seg', label: 'Garis kisi (gridlines)', choices: [['auto', 'Otomatis'], ['on', 'Tampilkan'], ['off', 'Sembunyikan']], value: 'auto',
+          help: 'Otomatis: mengikuti pengaturan cetak Excel; file CSV selalu diberi garis.' },
+        { id: 'locale', type: 'seg', label: 'Format angka', choices: [['id', 'Indonesia (1.234,5)'], ['en', 'Inggris (1,234.5)']], value: 'id', show: (o, c) => c.files.some((f) => !/\.(csv|tsv)$/i.test(f.name)) },
+        { id: 'header', type: 'check', label: 'Baris pertama CSV adalah judul kolom (ditebalkan & diulang tiap halaman)', value: true, show: (o, c) => c.files.some((f) => /\.(csv|tsv)$/i.test(f.name)) },
+        { id: 'merge', type: 'check', label: 'Gabungkan semua menjadi satu PDF', value: true, show: (o, c) => c.files.length > 1 },
+      ] },
+    { id: 'ppt-ke-pdf', cat: 'konversi', icon: 'slides', name: 'PowerPoint ke PDF', desc: 'Ubah presentasi PowerPoint (PPTX) menjadi PDF, satu slide per halaman.', accept: ['pptx'], multiple: true, view: 'files', run: OPS.ppt2pdf, runLabel: 'Konversi ke PDF',
+      options: [
+        { id: 'dpi', type: 'seg', label: 'Kualitas', choices: [['110', 'Hemat'], ['150', 'Standar'], ['220', 'Tinggi']], value: '150', help: 'Kualitas tinggi lebih tajam saat dicetak, tetapi ukuran file lebih besar.' },
+        { id: 'hidden', type: 'check', label: 'Sertakan slide tersembunyi', value: false },
+        { id: 'merge', type: 'check', label: 'Gabungkan semua menjadi satu PDF', value: true, show: (o, c) => c.files.length > 1 },
+      ] },
     { id: 'gambar-ke-pdf', cat: 'konversi', icon: 'images', name: 'Gambar ke PDF', desc: 'Ubah foto JPG, PNG, atau WEBP menjadi PDF rapi.', accept: ['img'], multiple: true, view: 'files', run: OPS.img2pdf, runLabel: 'Buat PDF',
       options: [
         { id: 'size', type: 'select', label: 'Ukuran halaman', choices: [['A4', 'A4'], ['F4', 'F4 / Folio'], ['Letter', 'Letter'], ['A5', 'A5'], ['fit', 'Sesuai gambar']], value: 'A4' },
@@ -2260,7 +2329,7 @@
       for (const file of arr) {
         const kind = kindOf(file);
         if (!kind || !t.accept.includes(kind)) {
-          toast(`"${file.name}" tidak didukung di alat ini. Gunakan ${t.accept.flatMap((k) => KIND_LABEL[k]).join(', ')}.`, 'error');
+          toast(legacyHint(file.name) || `"${file.name}" tidak didukung di alat ini. Gunakan ${t.accept.flatMap((k) => KIND_LABEL[k]).join(', ')}.`, 'error');
           continue;
         }
         const entry = { id: uid(), file, name: file.name, size: file.size, kind };

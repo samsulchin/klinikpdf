@@ -1,6 +1,6 @@
 /* KlinikPDF — Service worker: menyimpan semua file aplikasi agar bisa dipakai offline.
    Naikkan VERSION setiap kali ada perubahan file supaya pengguna mendapat versi terbaru. */
-const VERSION = 'klinikpdf-v3.2.0';
+const VERSION = 'klinikpdf-v3.3.1';
 // Mesin OCR (vendor/tesseract, ±12 MB) tidak ikut disimpan di awal: disimpan otomatis saat pertama dipakai.
 const ASSETS = [
   './',
@@ -12,6 +12,7 @@ const ASSETS = [
   'js/app.js',
   'js/tools.js',
   'js/pdfcrypt.js',
+  'js/office.js',
   'assets/favicon.svg',
   'assets/icon-192.png',
   'assets/icon-512.png',
