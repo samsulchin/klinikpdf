@@ -1,6 +1,6 @@
 /* KlinikPDF — Service worker: menyimpan semua file aplikasi agar bisa dipakai offline.
    Naikkan VERSION setiap kali ada perubahan file supaya pengguna mendapat versi terbaru. */
-const VERSION = 'klinikpdf-v3.3.3';
+const VERSION = 'klinikpdf-v3.4.0';
 // Kunci cache untuk halaman utama (satu-satunya halaman HTML aplikasi).
 const PAGE = 'index.html';
 // Mesin OCR (vendor/tesseract, ±12 MB) tidak ikut disimpan di awal: disimpan otomatis saat pertama dipakai.

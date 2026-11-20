@@ -1,7 +1,7 @@
 # KlinikPDF — Tanda Tangan Digital & Alat PDF
 
 Website untuk menandatangani dokumen **PDF, Word (DOCX), JPG, PNG, dan WEBP** langsung dari browser,
-plus **39 alat PDF** (gabung, pisah, kompres, konversi, kunci, OCR, dan lainnya).
+plus **40 alat PDF** (gabung, pisah, kompres, konversi, kunci, OCR, dan lainnya).
 Gratis, tanpa daftar, **tanpa batas halaman**, **bisa offline**, dan **dokumen tidak pernah diunggah ke server**.
 
 Dibuat oleh **Samsul Arifin**, peneliti Artificial Intelligence, Data Science, Computer Vision, dan Biomedical
@@ -38,7 +38,7 @@ Dibuat oleh **Samsul Arifin**, peneliti Artificial Intelligence, Data Science, C
 | Kategori | Alat |
 |---|---|
 | Atur & Gabung | Atur PDF, Gabung PDF, Pisah PDF, Putar Halaman, Hapus Halaman, Ambil Halaman, Urutkan Halaman (termasuk merapikan scan bolak-balik), Halaman per Lembar (2–16), Ubah Ukuran Halaman (A4, F4, Letter, …), Potong/Crop (manual atau otomatis) |
-| Konversi | Konversi ke PDF (DOCX, XLSX/CSV, PPTX, gambar, TXT), Excel ke PDF, PowerPoint ke PDF, Gambar ke PDF, PDF ke Word/Teks/JPG/PNG, PDF ke Gambar, Ekstrak Gambar, OCR (Indonesia + Inggris) |
+| Konversi | Konversi ke PDF (DOCX, XLSX/CSV, PPTX, gambar, TXT), Excel ke PDF, PowerPoint ke PDF, Gambar ke PDF, PDF ke Word/Teks/JPG/PNG, PDF ke Markdown, PDF ke Gambar, Ekstrak Gambar, OCR (Indonesia + Inggris) |
 | Edit & Tanda Tangan | Tanda Tangan, Edit, Anotasi, Sensor, Buat Formulir (lewat editor), Watermark teks/logo, Nomor Halaman, Overlay/Kop Surat, Ratakan (Flatten) |
 | Optimasi & Keamanan | Kompres, Optimasi Web, Kunci PDF (AES-256), Buka Kunci (RC4/AES-128/AES-256), Perbaiki PDF, Bandingkan PDF (teks & visual) |
 | Properti Dokumen | Edit Metadata, Hapus Metadata, Preferensi Tampilan, Edit Bookmark |

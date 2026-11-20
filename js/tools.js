@@ -545,7 +545,9 @@
     const U = window.pdfjsLib.Util;
     const items = [];
     for (const it of tc.items) {
-      if (!it.str) continue;
+      // Potongan yang hanya berisi spasi diabaikan: pdf.js kadang menyisipkannya selebar celah antarkolom,
+      // sehingga tabel tidak terdeteksi. Spasi & kolom ditentukan ulang dari jarak antarteks.
+      if (!it.str || !it.str.trim()) continue;
       const tx = U.transform(vp.transform, it.transform);
       const size = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 10;
       items.push({ str: it.str, x: tx[4], y: tx[5], w: it.width || size * it.str.length * 0.5, size });
@@ -554,8 +556,10 @@
     const lines = [];
     for (const it of items) {
       const last = lines[lines.length - 1];
-      if (last && Math.abs(it.y - last.y) < Math.max(2, Math.min(it.size, last.size) * 0.5)) last.items.push(it);
-      else lines.push({ y: it.y, items: [it] });
+      if (last && Math.abs(it.y - last.y) < Math.max(2, Math.min(it.size, last.size) * 0.5)) {
+        last.items.push(it);
+        last.size = Math.max(last.size, it.size);
+      } else lines.push({ y: it.y, size: it.size, items: [it] });
     }
     for (const l of lines) {
       l.items.sort((a, b) => a.x - b.x);
@@ -576,6 +580,8 @@
     }
     return { lines: lines.filter((l) => l.text.trim()), width: vp.width, height: vp.height };
   }
+  /** Awal baris daftar: •, -, *, 1., 1), a., (a) … */
+  const LIST_RE = /^\s*([•●▪◦‣∙·\-–—*]|\(?\d{1,3}[.)]|\(?[a-zA-Z][.)])\s+/;
   function toParagraphs(pg) {
     const L = pg.lines;
     if (!L.length) return { paras: [], minX: 0 };
@@ -589,7 +595,7 @@
       const l = L[i], prev = L[i - 1];
       const gap = prev ? l.y - prev.y : 0;
       const center = Math.abs((l.x + l.right) / 2 - pg.width / 2) < pg.width * 0.04 && l.x - minX > pg.width * 0.1;
-      const join = cur && prev && !cur.center && !center && !cur.tab && !/\t/.test(l.text) &&
+      const join = cur && prev && !cur.center && !center && !cur.tab && !/\t/.test(l.text) && !LIST_RE.test(l.text) &&
         Math.abs(l.size - prev.size) < 0.8 && gap > 0 && gap < prev.size * 1.8 &&
         Math.abs(l.x - cur.x) < prev.size * 1.6 && prev.right > maxR - prev.size * 7;
       if (join) {
@@ -1111,18 +1117,127 @@
     return outs;
   };
 
+  /** Ubah PDF menjadi Markdown: judul (dari ukuran huruf), paragraf, daftar, tabel, dan gambar (opsional). */
+  function mdEscape(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/([*`[\]<])/g, '\\$1')
+      .replace(/^(\s*)([#>+=])/, '$1\\$2').replace(/^(\s*\d+)([.)])(\s)/, '$1\\$2$3');
+  }
+  async function pdfToMarkdown(f, o, progress) {
+    const pdf = await pdfjsDoc(f.bytes);
+    try {
+      const idx = pageList(o.pages, pdf.numPages);
+      const seen = new Set();
+      const pages = [];
+      const sizes = [];
+      for (let k = 0; k < idx.length; k++) {
+        progress(`Membaca halaman ${k + 1}/${idx.length}…`, k / idx.length);
+        const page = await pdf.getPage(idx[k] + 1);
+        const { paras, minX } = toParagraphs(await pageLines(page));
+        for (const p of paras) for (let r = 0; r < Math.max(1, Math.round(p.text.length / 40)); r++) sizes.push(p.size);
+        const imgs = o.images ? await pageImageCanvases(page, seen, 60) : [];
+        pages.push({ n: idx[k] + 1, paras, minX, imgs });
+        page.cleanup();
+      }
+      sizes.sort((a, b) => a - b);
+      const body = sizes[Math.floor(sizes.length / 2)] || 11;
+      const blocks = []; // { t: 'p' | 'li' | 'raw', s }
+      const images = [];
+      for (const pg of pages) {
+        if (o.pageMarks && blocks.length) blocks.push({ t: 'raw', s: `---\n\n<!-- Halaman ${pg.n} -->` });
+        const P = pg.paras;
+        for (let i = 0; i < P.length; i++) {
+          const p = P[i];
+          if (p.tab) {
+            const rows = [];
+            while (i < P.length && P[i].tab) { rows.push(P[i].text.split(/\t+/).map((c) => mdEscape(c.trim()).replace(/\|/g, '\\|'))); i++; }
+            i--;
+            if (rows.length >= 2) {
+              const cols = Math.max(...rows.map((r) => r.length));
+              const fix = (r) => `| ${[...r, ...Array(cols - r.length).fill('')].join(' | ')} |`;
+              blocks.push({ t: 'raw', s: [fix(rows[0]), `|${' --- |'.repeat(cols)}`, ...rows.slice(1).map(fix)].join('\n') });
+            } else blocks.push({ t: 'p', s: rows[0].join('  ') });
+            continue;
+          }
+          const t = p.text.trim();
+          const m = t.match(LIST_RE);
+          if (m) {
+            const lvl = Math.min(3, Math.floor(Math.max(0, p.x - pg.minX) / 18));
+            const rest = mdEscape(t.slice(m[0].length));
+            const mk = m[1].replace(/[()]/g, '');
+            const bullet = /^\d+[.)]$/.test(mk) ? mk.replace(')', '.') : /^[a-zA-Z][.)]$/.test(mk) ? `- ${mk}` : '-';
+            blocks.push({ t: 'li', s: `${'  '.repeat(lvl)}${bullet} ${rest}` });
+            continue;
+          }
+          const ratio = p.size / body;
+          if (t.length <= 120 && ratio >= 1.12 && !/[.,;:]$/.test(t)) {
+            blocks.push({ t: 'p', s: `${'#'.repeat(ratio >= 1.6 ? 1 : ratio >= 1.3 ? 2 : 3)} ${mdEscape(t)}` });
+          } else blocks.push({ t: 'p', s: mdEscape(t) });
+        }
+        pg.imgs.forEach((c, j) => {
+          const name = `gambar/hal${pg.n}-${j + 1}.png`;
+          images.push({ name, canvas: c });
+          blocks.push({ t: 'p', s: `![Gambar halaman ${pg.n}](${name})` });
+        });
+      }
+      if (!blocks.some((b) => b.t !== 'raw' && !b.s.startsWith('!['))) {
+        if (!images.length) throw userErr('Tidak ada teks yang bisa dibaca di PDF ini (kemungkinan hasil scan). Gunakan alat OCR PDF dulu, lalu ubah hasilnya ke Markdown.');
+      }
+      let md = '';
+      blocks.forEach((b, i) => { md += (i ? (b.t === 'li' && blocks[i - 1].t === 'li' ? '\n' : '\n\n') : '') + b.s; });
+      md += '\n';
+      const base = baseOf(f.name);
+      if (!images.length) return { name: `${base}.md`, blob: new Blob([md], { type: 'text/markdown;charset=utf-8' }) };
+      await loadScript('vendor/jszip.min.js');
+      const zip = new window.JSZip();
+      zip.file(`${base}.md`, md);
+      for (const im of images) {
+        zip.file(im.name, await canvasToBlob(im.canvas, 'image/png'));
+        im.canvas.width = im.canvas.height = 0;
+      }
+      return { name: `${base}-markdown.zip`, blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }) };
+    } finally { pdf.destroy(); }
+  }
+
   OPS.fromPdf = async (ctx) => {
     const f = ctx.files[0], o = ctx.opt;
     if (o.target === 'docx') return [{ name: baseOf(f.name) + '.docx', blob: await pdfToDocx(f, o, ctx.progress) }];
     if (o.target === 'txt') return [{ name: baseOf(f.name) + '.txt', blob: await pdfToText(f, o, ctx.progress) }];
+    if (o.target === 'md') return [await pdfToMarkdown(f, o, ctx.progress)];
     return pdfToImages(f, { ...o, format: o.target }, ctx.progress);
   };
+  OPS.toMarkdown = async (ctx) => {
+    const r = await pdfToMarkdown(ctx.files[0], ctx.opt, ctx.progress);
+    const res = [r];
+    if (/\.zip$/.test(r.name)) res.note = 'File Markdown dan folder gambar dikemas dalam satu ZIP. Ekstrak dulu agar gambar tampil.';
+    return res;
+  };
   OPS.toImages = (ctx) => pdfToImages(ctx.files[0], ctx.opt, ctx.progress);
+
+  /** Ambil gambar-gambar di satu halaman PDF sebagai kanvas (gambar yang sama tidak diambil dua kali). */
+  async function pageImageCanvases(page, seen, min) {
+    const P = window.pdfjsLib.OPS;
+    const ops = await page.getOperatorList();
+    const out = [];
+    for (let k = 0; k < ops.fnArray.length; k++) {
+      const fn = ops.fnArray[k];
+      let img = null;
+      if (fn === P.paintImageXObject || fn === P.paintImageXObjectRepeat) {
+        const id = ops.argsArray[k][0];
+        if (seen.has(id)) continue;
+        seen.add(id);
+        img = await objOf(page, id);
+      } else if (fn === P.paintInlineImageXObject) img = ops.argsArray[k][0];
+      else continue;
+      if (!img || img.width < min || img.height < min) continue;
+      const c = pdfImageToCanvas(img);
+      if (c) out.push(c);
+    }
+    return out;
+  }
 
   OPS.extractImages = async (ctx) => {
     const f = ctx.files[0], o = ctx.opt;
     const pdf = await pdfjsDoc(f.bytes);
-    const P = window.pdfjsLib.OPS;
     const seen = new Set();
     const outs = [];
     const min = num(o.min, 40);
@@ -1131,20 +1246,7 @@
       for (let i = 1; i <= pdf.numPages; i++) {
         ctx.progress(`Memindai halaman ${i}/${pdf.numPages}…`, (i - 1) / pdf.numPages);
         const page = await pdf.getPage(i);
-        const ops = await page.getOperatorList();
-        for (let k = 0; k < ops.fnArray.length; k++) {
-          const fn = ops.fnArray[k];
-          let img = null;
-          if (fn === P.paintImageXObject || fn === P.paintImageXObjectRepeat) {
-            const id = ops.argsArray[k][0];
-            if (seen.has(id)) continue;
-            seen.add(id);
-            img = await objOf(page, id);
-          } else if (fn === P.paintInlineImageXObject) img = ops.argsArray[k][0];
-          else continue;
-          if (!img || img.width < min || img.height < min) continue;
-          const c = pdfImageToCanvas(img);
-          if (!c) continue;
+        for (const c of await pageImageCanvases(page, seen, min)) {
           if (fmt === 'jpg') {
             const x = c.getContext('2d');
             x.globalCompositeOperation = 'destination-over';
@@ -1911,6 +2013,7 @@
     toImages: '<rect x="3" y="7" width="14" height="14" rx="2"/><circle cx="8" cy="12" r="1.5"/><path d="m17 17-3-3-6 7"/><path d="M8 3h11a2 2 0 0 1 2 2v11"/>',
     extractImages: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="1.5"/><path d="m20 18-3-3-7 7"/>',
     ocr: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 12h10M7 15h6"/>',
+    markdown: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 15V9l3 3 3-3v6M17 9v6M14.5 12.5 17 15l2.5-2.5"/>',
     web: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     watermark: '<path d="M12 2.7 6.3 9.4a7 7 0 1 0 11.4 0z"/>',
     pagenum: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 13v5M8 14l2-1M14 15h-1.5a1.5 1.5 0 0 0 0 3H14"/>',
@@ -2007,11 +2110,19 @@
       ] },
     { id: 'konversi-dari-pdf', cat: 'konversi', icon: 'fromPdf', name: 'PDF ke Word / Teks', desc: 'Ubah PDF menjadi Word (DOCX), teks, atau gambar.', accept: ['pdf'], view: 'single', run: OPS.fromPdf, runLabel: 'Konversi',
       options: [
-        { id: 'target', type: 'seg', label: 'Ubah menjadi', choices: [['docx', 'Word'], ['txt', 'Teks'], ['jpg', 'JPG'], ['png', 'PNG']], value: 'docx' },
+        { id: 'target', type: 'seg', label: 'Ubah menjadi', choices: [['docx', 'Word'], ['md', 'Markdown'], ['txt', 'Teks'], ['jpg', 'JPG'], ['png', 'PNG']], value: 'docx' },
+        { id: 'images', type: 'check', label: 'Sertakan gambar (hasil berupa ZIP)', value: true, show: (o) => o.target === 'md' },
         { id: 'docx', type: 'seg', label: 'Mode Word', choices: [['text', 'Teks bisa diedit'], ['layout', 'Tata letak persis']], value: 'text', show: (o) => o.target === 'docx',
           help: (o) => (o.docx === 'layout' ? 'Setiap halaman menjadi gambar di Word: tampilan sama persis, tetapi teks tidak bisa diedit.' : 'Teks & paragraf bisa diedit. Tata letak rumit (tabel, kolom) bisa bergeser.') },
         { id: 'dpi', type: 'seg', label: 'Kualitas gambar', choices: [['72', 'Rendah'], ['150', 'Sedang'], ['300', 'Tinggi']], value: '150', show: (o) => o.target === 'jpg' || o.target === 'png' },
         PAGES_OPT(),
+      ] },
+    { id: 'pdf-ke-markdown', cat: 'konversi', icon: 'markdown', name: 'PDF ke Markdown', desc: 'Ubah PDF menjadi Markdown (.md) lengkap dengan judul, daftar, dan tabel. Cocok untuk Notion, GitHub, atau asisten AI.', accept: ['pdf'], view: 'single', run: OPS.toMarkdown, runLabel: 'Ubah ke Markdown',
+      options: [
+        { id: 'images', type: 'check', label: 'Sertakan gambar', value: true, help: 'Jika PDF berisi gambar, hasilnya berupa ZIP: file .md + folder gambar.' },
+        { id: 'pageMarks', type: 'check', label: 'Tandai batas setiap halaman', value: false },
+        PAGES_OPT(),
+        { type: 'note', html: 'Judul dikenali dari ukuran huruf, daftar dari tanda poin/nomor, dan tabel dari kolom yang berjarak. PDF hasil scan perlu di-OCR dulu.' },
       ] },
     { id: 'pdf-ke-gambar', cat: 'konversi', icon: 'toImages', name: 'PDF ke Gambar', desc: 'Simpan setiap halaman PDF sebagai JPG atau PNG.', accept: ['pdf'], view: 'single', run: OPS.toImages, runLabel: 'Buat Gambar',
       options: [
